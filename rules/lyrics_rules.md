@@ -1,35 +1,45 @@
-# Lyrics & Song Structure Rules
+# Reglas de Letra, Estructura y Estilos Musicales
 
-## Song Structure
-Follow a standard pop/hip-hop structure unless the user specifies otherwise:
+## 1. ESTILOS / TAGS MUSICALES (Suno / Udio)
+- Traduce el estilo musical base a tags genéricos y descriptivos para la IA generadora de música.
+- **REGLA DE COPYRIGHT (ESTRICTA)**: Está **estrictamente prohibido** usar nombres de artistas reales o marcas registradas (ej. Peso Pluma, Xavi, Natanael Cano, Junior H, Fuerza Regida, etc.).
+- Si el usuario menciona o pide el estilo de un artista, deduce sus características musicales y escribe los tags correspondientes (ej. *"corridos tumbados, requinto rápido, tololoche, brass, trompetas belicas, voz masculina rasposa, sierreño, bajo quinto, percusión acústica"*).
+
+## 2. ESTRUCTURA EXACTA DE LA CANCIÓN
+La letra DEBE seguir obligatoriamente esta estructura y nombres de sección:
 
 ```
-[Intro]         — 2-4 bars, optional vocalization or ad-lib
-[Verse 1]       — 8-16 bars
-[Pre-Chorus]    — 2-4 bars (optional, builds energy)
-[Chorus]        — 4-8 bars, catchy & memorable hook
-[Verse 2]       — 8-16 bars, develops narrative
-[Chorus]        — repeat chorus
-[Bridge]        — 4-8 bars, contrast / key change / new idea
-[Chorus]        — final chorus, may add ad-libs
-[Outro]         — 2-4 bars, fade or tag line
+[Intro]
+[Verso 1]
+[Verso 2]
+[Coro]
+[Verso 3]
+[Coro]
+[Outro]
 ```
 
-## Writing Guidelines
-1. **Authenticity** — Write in the voice and slang appropriate to the genre.
-2. **Rhyme scheme** — Use at least an AABB or ABAB scheme in verses.
-3. **Hook** — The chorus must contain a clear, repeatable hook phrase.
-4. **Sensory language** — Use vivid imagery that can inspire the background visual.
-5. **Length** — Target 200-350 words total for a 3-4 minute song.
+### Reglas de Estrofas y Líneas (Crucial para el modelo de voz)
+- **Estructura corta**: Cada sección (intro, versos, coros, outro) **NO DEBE TENER MÁS DE 4 LÍNEAS**. Esto es indispensable para que el modelo de voz de Suno/Udio no se sature ni corte frases.
+- **Rima rica**: Prohibido usar rimas pobres o repetir la misma palabra al final del verso (ej. NO rimes "trabajando aquí" con "sigues aquí"). Usa esquemas AABB o ABAB con consonantes o asonantes ricas.
 
-## Metadata Formatting
-Return lyrics as a **single string** with section headers in square brackets
-on their own lines (as shown above). Use `\n` for line breaks inside the
-JSON payload.
+### Fonética para la IA (Términos en Inglés)
+- Escribe los términos técnicos en inglés **exactamente como se deben pronunciar en español** para que el modelo de voz los cante con perfecta dicción:
+  - Ejemplos: `bac-end` (backend), `fron-end` (frontend), `ese-cu-ele` (SQL), `pi-pi-ay` o `a-pi` (API), `deplóy` (deploy), `git-job` (GitHub), `yábascript` (JavaScript), `paiton` (Python), `dóquer` (Docker), `bóg` (bug), `claúd` (cloud), `cúbernetes` (Kubernetes), `servér` (server).
 
-## Forbidden Content
-- No explicit slurs or hate speech.
-- No promotion of violence or self-harm.
-- Keep content suitable for general audiences unless the user explicitly
-  requests mature themes.
+### Menciones Obligatorias
+En el `[Intro]`, DEBES incluir obligatoriamente las siguientes dos frases escritas exactamente así:
+- `"Música de la cuatro cero tres"`
+- `"Corridos en ache-te-eme-ele"`
 
+Ejemplo de [Intro] válido (máximo 4 líneas):
+```
+[Intro]
+Compa, súbale al requinto y prenda la consola,
+Música de la cuatro cero tres,
+Corridos en ache-te-eme-ele pa' que suene recio,
+¡Puro código bélico, viejo!
+```
+
+## 3. HASHTAGS
+- Genera 5 hashtags contextuales sobre la temática técnica de la canción (ej. `#Programacion #Developer #Backend #SoftwareEngineer #DevLife`).
+- Incluye **SIEMPRE al final** estos dos hashtags obligatorios: `#corridosenhtml #musicadela403`.

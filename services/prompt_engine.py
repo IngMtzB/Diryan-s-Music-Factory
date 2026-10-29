@@ -5,6 +5,7 @@ requests a strict JSON spec from the selected LLM.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -22,14 +23,14 @@ commentary) that conforms exactly to this schema:
 
 {
   "title": "<creative and catchy song title matching the concept>",
-  "suno_styles": "<comma-separated list of 8-12 specific tags for Suno AI music generation, including subgenres, primary acoustic & electronic instruments, rhythm/bpm feel, bass style, mood, and production texture. e.g. 'electro corrido tumbado, corrido tumbado, regional mexicano, electronic trap beat, heavy synth bass, melancholic requinto, fat 808 sub-bass, futuristic regional, dark atmospheric synths, crisp snappy drums'>",
-  "lyrics": "<full song lyrics as a single string, section headers in [brackets], lines separated by \\n>",
+  "suno_styles": "<comma-separated list of 8-12 generic tags for Suno AI music generation. COPYRIGHT RULE: STRICTLY FORBIDDEN to use real artist names (e.g. Peso Pluma, Xavi, Natanael Cano, Junior H, etc.) or registered brands. Translate the style into generic acoustic and musical elements: subgenres, instruments, rhythm, bass, vocal texture, mood. e.g. 'corridos tumbados, requinto rápido, tololoche, brass belico, voz masculina rasposa, sierreño, bajo quinto, percusión acústica, trap beat 808'>",
+  "lyrics": "<full song lyrics formatted in exact Spanish with the mandatory 7-section structure: [Intro], [Verso 1], [Verso 2], [Coro], [Verso 3], [Coro], [Outro]. Every section MUST have at most 4 lines. No poor rhymes. Phonetic spelling in Spanish for English technical terms (e.g. 'bac-end', 'ese-cu-ele', 'pi-pi-ay', 'deplóy', 'git-job', 'yábascript', 'dóquer'). In [Intro] you MUST include: 'Música de la cuatro cero tres' and 'Corridos en ache-te-eme-ele'>",
   "description": "<an engaging YouTube/TikTok/Instagram description explaining the vibe/story of the song, followed by the complete lyrics, credits, and call to action>",
-  "hashtags": "<8 to 15 relevant space-separated hashtags, e.g. '#ElectroCorrido #CorridosTumbados #TrapLatino #RegionalMexicano #ViralMusic'>",
+  "hashtags": "<5 contextual technical hashtags regarding the song theme, followed ALWAYS at the end by '#corridosenhtml #musicadela403'>",
   "image_prompt": "<a vivid, genre-matched 16:9 background image generation prompt that follows the visual rules, keeping the lower 25% dark/simple for overlay space>",
   "render_spec": {
     "waveform": {
-      "style": "<frequency_bars | mirrored_bars | equalizer | neon_glow_line | none>",
+      "style": "<mirrored_bars | frequency_bars | equalizer | neon_glow_line | none>",
       "position": "<bottom | center>",
       "primary_color": "<hex color matching the scene vibe>",
       "secondary_color": "<hex color matching the scene accent>",
@@ -46,6 +47,82 @@ commentary) that conforms exactly to this schema:
 Do NOT wrap the JSON in markdown code fences.  Do NOT add any text before or
 after the JSON object.
 """
+
+
+# ── Validation and Sanitization Helpers ───────────────────────────────────────
+
+_BANNED_ARTISTS = [
+    r"\bpeso\s+pluma\b",
+    r"\bnatanael\s+cano\b",
+    r"\bjunior\s+h\b",
+    r"\bfuerza\s+regida\b",
+    r"\bxavi\b",
+    r"\bgabito\s+ballesteros\b",
+    r"\beslabon\s+armado\b",
+    r"\bbad\s+bunny\b",
+    r"\banuel\b",
+    r"\bbizarrap\b",
+    r"\bquevedo\b",
+    r"\btito\s+double\s+p\b",
+    r"\bluis\s+r\s+conriquez\b",
+]
+
+
+def _sanitize_suno_styles(styles_str: str, fallback_genre: str) -> str:
+    """Ensure no real artist names or trademarks appear in Suno style tags."""
+    cleaned = styles_str or fallback_genre
+    for pattern in _BANNED_ARTISTS:
+        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r",\s*,+", ",", cleaned)
+    cleaned = cleaned.strip(" ,")
+    if not cleaned:
+        cleaned = "corridos tumbados, requinto rapido, tololoche, brass, 808 sub bass, voz masculina rasposa"
+    return cleaned
+
+
+def _validate_and_fix_hashtags(hashtags_str: str) -> str:
+    """Ensure 5 contextual technical hashtags and end with #corridosenhtml #musicadela403."""
+    raw_tags = [
+        t if t.startswith("#") else f"#{t}"
+        for t in (hashtags_str or "").replace(",", " ").split()
+        if t.strip()
+    ]
+    # Filter out the mandatory tags so we append them deterministically at the end
+    tags = [
+        t for t in raw_tags if t.lower() not in ("#corridosenhtml", "#musicadela403")
+    ]
+
+    defaults = ["#Programacion", "#Developer", "#SoftwareEngineer", "#Coding", "#TechLife"]
+    for dt in defaults:
+        if len(tags) >= 5:
+            break
+        if dt not in tags:
+            tags.append(dt)
+
+    # 5 contextual + mandatory 2
+    final_tags = tags[:5] + ["#corridosenhtml", "#musicadela403"]
+    return " ".join(final_tags)
+
+
+def _validate_and_fix_lyrics(lyrics_str: str) -> str:
+    """Ensure mandatory mentions exist with exact corrected pronunciation."""
+    mention_1 = "Música de la cuatro cero tres"
+    mention_2 = "Corridos en ache-te-eme-ele"
+
+    has_m1 = "cuatro cero tres" in lyrics_str.lower()
+    has_m2 = "ache-te-eme-ele" in lyrics_str.lower()
+
+    if has_m1 and has_m2:
+        return lyrics_str
+
+    # Inject into [Intro] if absent
+    if "[Intro]" in lyrics_str:
+        return lyrics_str.replace(
+            "[Intro]",
+            f"[Intro]\n{mention_1},\n{mention_2},",
+            1,
+        )
+    return f"[Intro]\n{mention_1},\n{mention_2},\n\n" + lyrics_str
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
@@ -123,16 +200,18 @@ def request_spec(
     if not spec.get("title"):
         spec["title"] = concept[:40].strip().title()
 
-    if not spec.get("suno_styles"):
-        spec["suno_styles"] = f"{style.lower()}, acoustic and electronic elements, modern production, clear vocals, punchy rhythm"
+    # 1. Sanitize Suno styles (Strict Copyright: no artist names or brands)
+    spec["suno_styles"] = _sanitize_suno_styles(spec.get("suno_styles", ""), style)
+
+    # 2. Enforce mandatory mentions and lyrics rules
+    spec["lyrics"] = _validate_and_fix_lyrics(spec.get("lyrics", ""))
+
+    # 3. Enforce hashtags: 5 technical + #corridosenhtml #musicadela403
+    spec["hashtags"] = _validate_and_fix_hashtags(spec.get("hashtags", ""))
 
     if not spec.get("description"):
         lyrics = spec.get("lyrics", "")
-        spec["description"] = f"{concept}\n\nStyle: {style}\n\nLyrics:\n{lyrics}"
-
-    if not spec.get("hashtags"):
-        slug_genre = "".join(w.capitalize() for w in style.split() if w.isalnum())
-        spec["hashtags"] = f"#{slug_genre} #NewMusic #AIGeneratedMusic #DiryansMusicFactory"
+        spec["description"] = f"{concept}\n\nEstilo: {style}\n\nLetra:\n{lyrics}\n\n{spec['hashtags']}"
 
     return spec
 
