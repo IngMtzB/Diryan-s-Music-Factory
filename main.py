@@ -208,35 +208,51 @@ def _configure_visualizer_interactive(
 
     # 1. Waveform style
     style = inquirer.select(
-        message="Select waveform visual style:",
+        message="Select waveform visual style (form):",
         choices=[
             {
-                "name": "✨ Mirrored Center Spectrum (Cinematic, Bass in Center — Recommended)",
+                "name": "✨ Capsule Bars with Water Reflection (Image 1 style — Clean & Modern)",
+                "value": "rounded_mirror",
+            },
+            {
+                "name": "🟣 Halftone LED Dot Matrix (Image 2 style — Stadium Concert Grid)",
+                "value": "dot_matrix",
+            },
+            {
+                "name": "🎛️ Neon Segmented Ladder with Floor Reflection (Image 4 style — 3D Cyber Club)",
+                "value": "neon_ladder",
+            },
+            {
+                "name": "⚡ Double-Sided Center Soundwave (Image 5 style — Stem Waveform)",
+                "value": "center_symmetrical",
+            },
+            {
+                "name": "〰️ Glowing Sine Wave Ribbons (Image 3 style — Fluid Multi-Harmonics)",
+                "value": "flowing_ribbons",
+            },
+            {
+                "name": "📐 Cyber Polygon Spikes (Image 3 style — Razor-sharp EDM Trap)",
+                "value": "sharp_spikes",
+            },
+            {
+                "name": "📊 Classic Mirrored Spectrum (Solid rounded bars — Bass in Center)",
                 "value": "mirrored_bars",
             },
             {
-                "name": "📊 Frequency Bars (Left to Right: Bass → Mid → Treble)",
+                "name": "📈 Classic Frequency Bars (Solid rounded bars — Left to Right)",
                 "value": "frequency_bars",
-            },
-            {
-                "name": "🎛️ Segmented Equalizer (Retro Digital LED Blocks)",
-                "value": "equalizer",
-            },
-            {
-                "name": "〰️ Neon Glowing Wave Curve",
-                "value": "neon_glow_line",
             },
             {
                 "name": "🚫 Clean (No waveform — Camera shake & beat pulse only)",
                 "value": "none",
             },
         ],
-        default="mirrored_bars",
+        default="rounded_mirror",
     ).execute()
 
-    # 2. Color Palette
-    primary = "#00E5FF"
-    secondary = "#FF2A55"
+    # 2. Color Palette & Gradient
+    palette_colors = ["#00E5FF", "#FF2A55"]
+    color_mode = "horizontal"
 
     if style != "none":
         bg_path = project_dir / "03_background.png"
@@ -246,24 +262,36 @@ def _configure_visualizer_interactive(
             message="Select waveform color palette:",
             choices=[
                 {
-                    "name": f"🎨 Auto-Sample from Background Art ({auto_c1} & {auto_c2}) — Recommended",
+                    "name": f"🎨 Auto-Sample from Background Art ({auto_c1} & {auto_c2}) — Harmonized",
                     "value": "auto",
                 },
                 {
-                    "name": "🌌 Cyberpunk Neon (Cyan #00E5FF & Hot Red #FF2A55)",
+                    "name": "🌅 Sunset Fire (Image 5 style — Crimson #FF1744 → Orange #FF6D00 → Gold #FFD600)",
+                    "value": "sunset",
+                },
+                {
+                    "name": "🌆 Synthwave Neon (Image 2 & 4 style — Cyan #00F0FF → Purple #B000FF → Hot Pink #FF007F)",
                     "value": "cyberpunk",
                 },
                 {
-                    "name": "👑 Regal Gold & Amber (#FFD700 & #FF8C00)",
+                    "name": "🌈 Pastel Horizon Spectrum (Image 1 style — Yellow #FFE66D → Teal #4ECDC4 → Purple #7B2CBF → Coral #FF6B6B)",
+                    "value": "pastel",
+                },
+                {
+                    "name": "🎛️ Studio Peak Meter (Image 3 style — Green #00E676 → Yellow #FFD600 → Red #FF1744)",
+                    "value": "studio",
+                },
+                {
+                    "name": "👑 Regal Gold & Amber (#FFDF00 & #FF8C00)",
                     "value": "gold",
                 },
                 {
-                    "name": "🔮 Vaporwave (Electric Violet #9D00FF & Neon Pink #FF007F)",
-                    "value": "vaporwave",
+                    "name": "🧊 Glacier Cyan & Frost (#00FFFF & #FFFFFF)",
+                    "value": "ice",
                 },
                 {
-                    "name": "🧊 Ice Cyan & Pure White (#00F0FF & #FFFFFF)",
-                    "value": "ice",
+                    "name": "🎨 Custom Hex Color(s) (Type your own)",
+                    "value": "custom",
                 },
                 {
                     "name": "🤖 Keep AI Suggested Colors",
@@ -274,19 +302,51 @@ def _configure_visualizer_interactive(
         ).execute()
 
         if palette_choice == "auto":
-            primary, secondary = auto_c1, auto_c2
+            palette_colors = [auto_c1, auto_c2]
+        elif palette_choice == "sunset":
+            palette_colors = ["#FF1744", "#FF6D00", "#FFD600"]
         elif palette_choice == "cyberpunk":
-            primary, secondary = "#00E5FF", "#FF2A55"
+            palette_colors = ["#00F0FF", "#B000FF", "#FF007F"]
+        elif palette_choice == "pastel":
+            palette_colors = ["#FFE66D", "#4ECDC4", "#7B2CBF", "#FF6B6B"]
+        elif palette_choice == "studio":
+            palette_colors = ["#00E676", "#FFD600", "#FF1744"]
         elif palette_choice == "gold":
-            primary, secondary = "#FFD700", "#FF8C00"
-        elif palette_choice == "vaporwave":
-            primary, secondary = "#9D00FF", "#FF007F"
+            palette_colors = ["#FFDF00", "#FF8C00"]
         elif palette_choice == "ice":
-            primary, secondary = "#00F0FF", "#FFFFFF"
+            palette_colors = ["#00FFFF", "#FFFFFF"]
+        elif palette_choice == "custom":
+            custom_input = inquirer.text(
+                message="Enter 1 to 4 comma-separated hex colors (e.g. #FF0055, #00E5FF):",
+                default="#00E5FF, #FF2A55",
+            ).execute()
+            parsed = [c.strip() for c in custom_input.split(",") if c.strip().startswith("#")]
+            palette_colors = parsed if parsed else ["#00E5FF", "#FF2A55"]
         else:
             wf = default_spec.get("waveform", {})
-            primary = wf.get("primary_color", "#00E5FF")
-            secondary = wf.get("secondary_color", "#FF2A55")
+            p1 = wf.get("primary_color", "#00E5FF")
+            p2 = wf.get("secondary_color", "#FF2A55")
+            palette_colors = [p1, p2]
+
+        # Select gradient flow mode
+        if style not in ("flowing_ribbons",):
+            color_mode = inquirer.select(
+                message="Color gradient direction:",
+                choices=[
+                    {
+                        "name": "↔️ Horizontal Gradient (Colors flow smoothly across screen width from Left to Right)",
+                        "value": "horizontal",
+                    },
+                    {
+                        "name": "↕️ Vertical Height Gradient (Colors shift as bars grow taller/louder)",
+                        "value": "vertical",
+                    },
+                ],
+                default="horizontal" if style in ("rounded_mirror", "center_symmetrical", "sharp_spikes") else "vertical",
+            ).execute()
+
+    primary = palette_colors[0]
+    secondary = palette_colors[-1]
 
     # 3. Waveform Position
     position = "bottom"
@@ -328,6 +388,8 @@ def _configure_visualizer_interactive(
             "position": position,
             "primary_color": primary,
             "secondary_color": secondary,
+            "palette_colors": palette_colors,
+            "color_mode": color_mode,
             "bar_count": 48,
         },
         "motion_effects": {
@@ -340,7 +402,7 @@ def _configure_visualizer_interactive(
     console.print(
         f"\n[green]✔ Configuration applied:[/green] "
         f"Style: [bold]{style}[/bold] | "
-        f"Colors: [cyan]{primary}[/cyan] & [magenta]{secondary}[/magenta] | "
+        f"Palette: [cyan]{', '.join(palette_colors)}[/cyan] ({color_mode}) | "
         f"Shake: [yellow]{shake_choice}px[/yellow] | "
         f"Pulse: [yellow]{pulse_choice}[/yellow]\n"
     )

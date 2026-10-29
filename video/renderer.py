@@ -86,6 +86,26 @@ def hex_to_bgr(hex_color: str) -> tuple[int, int, int]:
     return (b, g, r)
 
 
+def interpolate_palette(colors: list[tuple[int, int, int]], pos: float) -> tuple[int, int, int]:
+    """Interpolate smoothly across a list of BGR colors at normalized position pos [0.0 .. 1.0]."""
+    if not colors:
+        return (255, 255, 255)
+    if len(colors) == 1:
+        return colors[0]
+    p = max(0.0, min(1.0, float(pos)))
+    scaled = p * (len(colors) - 1)
+    idx = int(scaled)
+    if idx >= len(colors) - 1:
+        return colors[-1]
+    frac = scaled - idx
+    c1, c2 = colors[idx], colors[idx + 1]
+    return (
+        int(c1[0] * (1.0 - frac) + c2[0] * frac),
+        int(c1[1] * (1.0 - frac) + c2[1] * frac),
+        int(c1[2] * (1.0 - frac) + c2[2] * frac),
+    )
+
+
 # ── Multi-band Audio Analysis ──────────────────────────────────────────────────
 
 def _analyse_audio(
@@ -121,8 +141,10 @@ def _analyse_audio(
     subbass = subbass[:min_len] / (subbass.max() + 1e-8)
 
     # 3 ── Mel Filterbank Spectrum for dynamic multi-band motion
+    # Nyquist limit for sr=22050 is 11025 Hz. Setting fmax to 10000 Hz ensures
+    # all mel filter channels have full coverage without empty/dead filters at the high end.
     mel_basis = librosa.filters.mel(
-        sr=sr, n_fft=n_fft, n_mels=bar_count, fmin=35, fmax=14000
+        sr=sr, n_fft=n_fft, n_mels=bar_count, fmin=35, fmax=10000
     )
     power_spec = S[:, :min_len] ** 2
     mel_spec = np.dot(mel_basis, power_spec)  # (bar_count, time)
@@ -130,8 +152,9 @@ def _analyse_audio(
     # Convert to dB
     mel_db = librosa.power_to_db(mel_spec, ref=np.max)
 
-    # Equalize frequency sensitivity: slight boost for higher frequencies so hats & vocals pop
-    treble_tilt = np.linspace(0.0, 10.0, bar_count)[:, None]
+    # Equalize frequency sensitivity: progressive treble boost (+12 dB at top band)
+    # so high-hats, percussions, and guitar harmonics bounce visibly
+    treble_tilt = np.linspace(0.0, 12.0, bar_count)[:, None]
     mel_db = mel_db + treble_tilt
 
     # Normalize between 0.0 and 1.0 with a -45dB floor
@@ -159,31 +182,45 @@ def _draw_waveform(
 ) -> np.ndarray:
     """
     Draw audio-reactive waveform onto *frame* based on dynamic frequency bands.
-    Supported styles:
-    - mirrored_bars: Center-out symmetrical spectrum (trap / cinematic channel style)
-    - frequency_bars: Left-to-right (Bass → Mid → Treble)
-    - equalizer: Segmented digital LED blocks
-    - neon_glow_line: Glowing fluid wave curve
+    Supported styles (inspired by studio visualizer archetypes):
+    - rounded_mirror: Capsule pills with smooth fading water reflection (Image 1 style)
+    - dot_matrix: Circular halftone LED stadium dot matrix with glowing peaks (Image 2 style)
+    - neon_ladder: Floating horizontal neon blocks with glossy floor reflection (Image 4 style)
+    - center_symmetrical: Double-sided soundwave centered on baseline (Image 5 style)
+    - flowing_ribbons: Multi-harmonic glowing sine wave ribbons (Image 3 style)
+    - sharp_spikes: Razor-sharp geometric polygon spikes (Image 3 style)
+    - mirrored_bars: Classic center-out symmetrical spectrum (Trap / Cinematic style)
+    - frequency_bars: Classic left-to-right (Bass → Mid → Treble)
+    - equalizer: Retro segmented digital LED blocks
     - none: Skip drawing
     """
     wf = spec.get("waveform", {})
-    style = wf.get("style", "mirrored_bars")
+    style = wf.get("style", "rounded_mirror")
     if style in ("none", "clean", "off"):
         return frame
 
     h, w = frame.shape[:2]
     position = wf.get("position", "bottom")
-    primary = hex_to_bgr(wf.get("primary_color", "#00E5FF"))
-    secondary = hex_to_bgr(wf.get("secondary_color", "#FF2A55"))
     n_bars = len(amplitudes)
 
-    # Reorder amplitudes for mirrored style: Bass in center, Treble on outside
-    if style == "mirrored_bars":
+    # Multi-color palette extraction
+    palette_hex = wf.get("palette_colors")
+    if not palette_hex or not isinstance(palette_hex, list):
+        p1 = wf.get("primary_color", "#00E5FF")
+        p2 = wf.get("secondary_color", "#FF2A55")
+        palette_hex = [p1, p2]
+    palette_bgr = [hex_to_bgr(c) for c in palette_hex]
+
+    color_mode = wf.get("color_mode", "auto")
+    if color_mode == "auto":
+        color_mode = "vertical" if style in ("dot_matrix", "neon_ladder", "equalizer") else "horizontal"
+
+    # Reorder amplitudes for center-out symmetrical styles
+    if style in ("mirrored_bars", "center_symmetrical"):
         half = n_bars // 2
-        # Left half: treble (far left) down to bass (center)
-        left_amps = amplitudes[half::-1]
-        # Right half: bass (center) up to treble (far right)
-        right_amps = amplitudes[:half]
+        pairs = np.maximum(amplitudes[0::2], amplitudes[1::2])[:half]
+        left_amps = pairs[::-1]
+        right_amps = pairs
         display_amps = np.concatenate([left_amps, right_amps])[:n_bars]
     else:
         display_amps = amplitudes
@@ -194,69 +231,201 @@ def _draw_waveform(
     bar_w = max(total_bar_width - gap, 2)
     max_bar_h = int(h * 0.28)
 
+    # Base Y positioning (leave headroom for reflection if style features reflection)
+    has_reflection = style in ("rounded_mirror", "neon_ladder", "dot_matrix")
     if position == "center":
         base_y = h // 2
-    else:  # bottom
-        base_y = h - 25
+    elif has_reflection:
+        base_y = h - 140
+    else:
+        base_y = h - 35
 
-    # ── Style: Neon Glow Line ──────────────────────────────────────────────
-    if style == "neon_glow_line":
-        points = []
-        for i in range(n_bars):
-            amp = float(display_amps[i])
-            px = int(i * total_bar_width + total_bar_width // 2)
-            py = int(base_y - amp * max_bar_h)
-            points.append((px, py))
-
-        if len(points) >= 2:
-            pts_arr = np.array(points, dtype=np.int32).reshape((-1, 1, 2))
-            # Outer glow
-            cv2.polylines(frame, [pts_arr], False, secondary, thickness=6, lineType=cv2.LINE_AA)
-            # Inner core
-            cv2.polylines(frame, [pts_arr], False, primary, thickness=2, lineType=cv2.LINE_AA)
+    # ── Style: Flowing Ribbons (Image 3 style) ─────────────────────────────
+    if style in ("flowing_ribbons", "neon_glow_line"):
+        ribbon_specs = [
+            (1.0, 0.0, palette_bgr[0], float(np.mean(display_amps[: len(display_amps) // 3]))),
+            (2.2, 1.4, palette_bgr[len(palette_bgr) // 2], float(np.mean(display_amps[len(display_amps) // 3 : 2 * len(display_amps) // 3]))),
+            (3.8, 2.8, palette_bgr[-1], float(np.mean(display_amps[2 * len(display_amps) // 3 :]))),
+        ]
+        for freq_m, phase, r_col, energy in ribbon_specs:
+            pts = []
+            cur_h = int(max_bar_h * (0.2 + 0.8 * energy))
+            for px in range(0, w + 10, 8):
+                norm_x = px / float(w)
+                envelope = np.sin(norm_x * np.pi)  # pin at edges
+                py = int(base_y - np.sin(norm_x * np.pi * 3.5 * freq_m + phase) * cur_h * envelope)
+                pts.append((px, py))
+            if len(pts) >= 2:
+                pts_arr = np.array(pts, dtype=np.int32).reshape((-1, 1, 2))
+                cv2.polylines(frame, [pts_arr], False, r_col, thickness=6, lineType=cv2.LINE_AA)
+                cv2.polylines(frame, [pts_arr], False, (255, 255, 255), thickness=2, lineType=cv2.LINE_AA)
         return frame
 
-    # ── Style: Segmented Equalizer or Rounded Bars ─────────────────────────
+    # ── Horizon line for reflection styles ─────────────────────────────────
+    if has_reflection:
+        cv2.line(frame, (gap, base_y), (w - gap, base_y), (50, 45, 60), 1, cv2.LINE_AA)
+
+    # ── Style: Sharp Spikes (Image 3 style) ────────────────────────────────
+    if style == "sharp_spikes":
+        for i in range(n_bars):
+            bar_amp = float(np.clip(display_amps[i], 0.03, 1.0))
+            bar_h = max(int(bar_amp * max_bar_h), 6)
+            x1 = i * total_bar_width + gap // 2
+            x2 = x1 + bar_w
+            x_mid = (x1 + x2) // 2
+            col = interpolate_palette(palette_bgr, i / max(n_bars - 1, 1))
+
+            # Main upward spike
+            pts_up = np.array([[x1, base_y], [x_mid, base_y - bar_h], [x2, base_y]], dtype=np.int32)
+            cv2.fillPoly(frame, [pts_up], col, lineType=cv2.LINE_AA)
+
+            # Mirrored downward spike
+            down_h = int(bar_h * 0.45)
+            pts_down = np.array([[x1, base_y], [x_mid, min(base_y + down_h, h - 2)], [x2, base_y]], dtype=np.int32)
+            dim_col = tuple(int(c * 0.55) for c in col)
+            cv2.fillPoly(frame, [pts_down], dim_col, lineType=cv2.LINE_AA)
+        return frame
+
+    # ── Style: Center Symmetrical (Image 5 style) ──────────────────────────
+    if style == "center_symmetrical":
+        cv2.line(frame, (gap, base_y), (w - gap, base_y), (70, 70, 85), 1, cv2.LINE_AA)
+        for i in range(n_bars):
+            bar_amp = float(np.clip(display_amps[i], 0.03, 1.0))
+            half_h = max(int(bar_amp * max_bar_h // 2), 4)
+            x1 = i * total_bar_width + gap // 2
+            x2 = x1 + bar_w
+            y1 = max(base_y - half_h, 8)
+            y2 = min(base_y + half_h, h - 8)
+            radius = min(bar_w // 2, 6)
+
+            col = interpolate_palette(palette_bgr, i / max(n_bars - 1, 1))
+
+            if y2 - radius > y1 + radius:
+                cv2.rectangle(frame, (x1, y1 + radius), (x2, y2 - radius), col, -1)
+                cv2.ellipse(frame, (x1 + bar_w // 2, y1 + radius), (bar_w // 2, radius), 0, 180, 360, col, -1)
+                cv2.ellipse(frame, (x1 + bar_w // 2, y2 - radius), (bar_w // 2, radius), 0, 0, 180, col, -1)
+            else:
+                cv2.rectangle(frame, (x1, y1), (x2, y2), col, -1)
+        return frame
+
+    # ── Style: Dot Matrix (Image 2 style) ──────────────────────────────────
+    if style == "dot_matrix":
+        max_dots = 20
+        dot_r = max(3, bar_w // 2 - 2)
+        step_y = dot_r * 2 + 5
+
+        for i in range(n_bars):
+            bar_amp = float(np.clip(display_amps[i], 0.04, 1.0))
+            active_dots = max(1, int(bar_amp * max_dots))
+            cx = i * total_bar_width + total_bar_width // 2
+
+            # Faint background column mesh
+            for d in range(active_dots, min(active_dots + 4, max_dots)):
+                cy = base_y - d * step_y
+                if cy > 10:
+                    cv2.circle(frame, (cx, cy), dot_r, (28, 22, 38), -1, cv2.LINE_AA)
+
+            # Active glowing dots
+            for d in range(active_dots):
+                cy = base_y - d * step_y
+                if cy < 10:
+                    break
+                blend = (d / max(max_dots - 1, 1)) if color_mode == "vertical" else (i / max(n_bars - 1, 1))
+                dot_col = interpolate_palette(palette_bgr, blend)
+
+                if d == active_dots - 1:
+                    # Peak dot spark & halo
+                    cv2.circle(frame, (cx, cy), dot_r + 3, dot_col, 2, cv2.LINE_AA)
+                    cv2.circle(frame, (cx, cy), dot_r, dot_col, -1, cv2.LINE_AA)
+                    cv2.circle(frame, (cx, cy), max(2, dot_r - 2), (255, 255, 255), -1, cv2.LINE_AA)
+                else:
+                    cv2.circle(frame, (cx, cy), dot_r, dot_col, -1, cv2.LINE_AA)
+
+            # Floor reflection dots
+            for d in range(min(active_dots, 5)):
+                cy_ref = base_y + (d + 1) * step_y
+                if cy_ref < h - 4:
+                    blend = (d / max(max_dots - 1, 1)) if color_mode == "vertical" else (i / max(n_bars - 1, 1))
+                    ref_col = interpolate_palette(palette_bgr, blend)
+                    dim_col = tuple(int(c * 0.28 * (1.0 - d / 5.0)) for c in ref_col)
+                    cv2.circle(frame, (cx, cy_ref), dot_r, dim_col, -1, cv2.LINE_AA)
+        return frame
+
+    # ── Styles: Rounded Mirror, Neon Ladder, Equalizer, Mirrored/Frequency Bars ──
     for i in range(n_bars):
         bar_amp = float(np.clip(display_amps[i], 0.02, 1.0))
-        bar_h = max(int(bar_amp * max_bar_h), 4)
-
+        bar_h = max(int(bar_amp * max_bar_h), 5)
         x1 = i * total_bar_width + gap // 2
         x2 = x1 + bar_w
         y1 = base_y - bar_h
         y2 = base_y
 
-        # Dynamic gradient blend
-        blend = float(np.clip(bar_amp, 0.0, 1.0))
-        color = tuple(
-            int(primary[c] * (1.0 - blend) + secondary[c] * blend) for c in range(3)
-        )
+        horiz_col = interpolate_palette(palette_bgr, i / max(n_bars - 1, 1))
 
-        if style == "equalizer":
-            # Segmented LED blocks
-            seg_h = 5
-            seg_gap = 2
+        if style == "rounded_mirror":
+            # Image 1 style: Capsule pill with water reflection
+            radius = min(bar_w // 2, 7)
+            col = horiz_col
+            cv2.rectangle(frame, (x1, y1 + radius), (x2, y2), col, -1)
+            cv2.ellipse(frame, (x1 + bar_w // 2, y1 + radius), (bar_w // 2, radius), 0, 180, 360, col, -1)
+
+            # Reflection fading downward
+            ref_h = int(bar_h * 0.65)
+            if ref_h > 2 and base_y + ref_h <= h:
+                alpha = np.linspace(0.38, 0.02, ref_h)[:, None, None]
+                orig = frame[base_y : base_y + ref_h, x1:x2].astype(np.float32)
+                frame[base_y : base_y + ref_h, x1:x2] = (
+                    orig * (1.0 - alpha) + np.array(col, dtype=np.float32) * alpha
+                ).astype(np.uint8)
+
+        elif style == "neon_ladder":
+            # Image 4 style: Segmented neon blocks with glossy floor reflection
+            seg_h, seg_gap = 6, 3
             segments = max(bar_h // (seg_h + seg_gap), 1)
             for s in range(segments):
                 sy2 = base_y - s * (seg_h + seg_gap)
                 sy1 = max(sy2 - seg_h, 0)
-                # Gradient by segment height
-                seg_blend = s / max(segments, 1)
-                seg_col = tuple(
-                    int(primary[c] * (1.0 - seg_blend) + secondary[c] * seg_blend)
-                    for c in range(3)
-                )
+                blend = (s / max(segments, 1)) if color_mode == "vertical" else (i / max(n_bars - 1, 1))
+                seg_col = interpolate_palette(palette_bgr, blend)
+
+                if s == segments - 1:
+                    cv2.rectangle(frame, (x1 - 1, sy1 - 1), (x2 + 1, sy2 + 1), seg_col, 1)
+                    cv2.rectangle(frame, (x1, sy1), (x2, sy2), (255, 255, 255), -1)
+                else:
+                    cv2.rectangle(frame, (x1, sy1), (x2, sy2), seg_col, -1)
+
+            # Glossy floor reflection
+            ref_segs = min(segments, 10)
+            for s in range(ref_segs):
+                ry1 = base_y + s * (seg_h + seg_gap) + 3
+                ry2 = min(ry1 + seg_h, h)
+                if ry2 <= ry1 or ry1 >= h:
+                    break
+                blend = (s / max(segments, 1)) if color_mode == "vertical" else (i / max(n_bars - 1, 1))
+                seg_col = interpolate_palette(palette_bgr, blend)
+                alpha = 0.32 * (1.0 - s / float(ref_segs))
+                orig = frame[ry1:ry2, x1:x2].astype(np.float32)
+                frame[ry1:ry2, x1:x2] = (
+                    orig * (1.0 - alpha) + np.array(seg_col, dtype=np.float32) * alpha
+                ).astype(np.uint8)
+
+        elif style == "equalizer":
+            # Classic studio LED blocks
+            seg_h, seg_gap = 5, 2
+            segments = max(bar_h // (seg_h + seg_gap), 1)
+            for s in range(segments):
+                sy2 = base_y - s * (seg_h + seg_gap)
+                sy1 = max(sy2 - seg_h, 0)
+                blend = (s / max(segments, 1)) if color_mode == "vertical" else (i / max(n_bars - 1, 1))
+                seg_col = interpolate_palette(palette_bgr, blend)
                 cv2.rectangle(frame, (x1, sy1), (x2, sy2), seg_col, -1)
+
         else:
-            # Rounded / Sleek bars with smooth top cap
+            # Solid rounded bars (mirrored_bars or frequency_bars)
             radius = min(bar_w // 2, 5)
-            cv2.rectangle(frame, (x1, y1 + radius), (x2, y2), color, -1)
-            cv2.ellipse(
-                frame,
-                (x1 + bar_w // 2, y1 + radius),
-                (bar_w // 2, radius),
-                0, 180, 360, color, -1,
-            )
+            col = horiz_col if color_mode == "horizontal" else interpolate_palette(palette_bgr, bar_amp)
+            cv2.rectangle(frame, (x1, y1 + radius), (x2, y2), col, -1)
+            cv2.ellipse(frame, (x1 + bar_w // 2, y1 + radius), (bar_w // 2, radius), 0, 180, 360, col, -1)
 
     return frame
 
