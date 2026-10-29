@@ -3,6 +3,11 @@
 
 #python
 .venv/
-
+# cahcecache__
+*.pyc
+__pycache__
 
 .env
+
+# creations
+projects/
