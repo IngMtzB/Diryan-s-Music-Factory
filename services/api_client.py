@@ -48,18 +48,24 @@ class ProviderClient(abc.ABC):
 # ── Gemini provider ───────────────────────────────────────────────────────────
 
 class GeminiProvider(ProviderClient):
-    """Uses google-genai SDK for both text (Gemini) and image (Imagen 3)."""
+    """Uses google-genai SDK for both text (Gemini) and image generation."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        text_model: str = GEMINI_TEXT_MODEL,
+        image_model: str = GEMINI_IMAGE_MODEL,
+    ) -> None:
         from google import genai
         self._client = genai.Client(api_key=get_key("GEMINI_API_KEY"))
+        self._text_model = text_model
+        self._image_model = image_model
 
     # ── Text ───────────────────────────────────────────────────────────────
     def generate_spec(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
         from google.genai import types
 
         response = self._client.models.generate_content(
-            model=GEMINI_TEXT_MODEL,
+            model=self._text_model,
             contents=user_prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
@@ -71,31 +77,33 @@ class GeminiProvider(ProviderClient):
 
     # ── Image ──────────────────────────────────────────────────────────────
     def generate_image(self, prompt: str) -> bytes:
+        """
+        Generate a 16:9 background image using generate_content with
+        response_modalities=["IMAGE"].  This is the current SDK approach
+        for Gemini Developer API (generate_images is Vertex/Enterprise only).
+        """
         from google.genai import types
 
-        response = self._client.models.generate_images(
-            model=GEMINI_IMAGE_MODEL,
-            prompt=prompt,
-            config=types.GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio="16:9",
+        response = self._client.models.generate_content(
+            model=self._image_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+                image_config=types.ImageConfig(
+                    aspect_ratio="16:9",
+                ),
             ),
         )
 
-        if not response.generated_images:
-            raise RuntimeError("Imagen 3 returned no images.")
+        for part in response.parts:
+            if part.inline_data and part.inline_data.data:
+                return part.inline_data.data
 
-        img = response.generated_images[0].image
-        # The SDK may give us a PIL Image or raw bytes depending on version
-        if hasattr(img, "image_bytes") and img.image_bytes:
-            return img.image_bytes
-        # Fallback: encode PIL image
-        if hasattr(img, "_pil_image") and img._pil_image:
-            buf = io.BytesIO()
-            img._pil_image.save(buf, format="PNG")
-            return buf.getvalue()
-
-        raise RuntimeError("Could not extract image bytes from Imagen response.")
+        raise RuntimeError(
+            "Image model returned no image data. "
+            f"Model used: {self._image_model!r}. "
+            "Response text: " + (response.text or "<empty>")
+        )
 
 
 # ── Anthropic + DALL-E provider ────────────────────────────────────────────────
@@ -138,10 +146,17 @@ class AnthropicProvider(ProviderClient):
 
 # ── Factory ────────────────────────────────────────────────────────────────────
 
-def build_provider(provider_name: str) -> ProviderClient:
+def build_provider(
+    provider_name: str,
+    gemini_text_model: str = GEMINI_TEXT_MODEL,
+    gemini_image_model: str = GEMINI_IMAGE_MODEL,
+) -> ProviderClient:
     """Instantiate the correct provider by name."""
     if provider_name == "gemini":
-        return GeminiProvider()
+        return GeminiProvider(
+            text_model=gemini_text_model,
+            image_model=gemini_image_model,
+        )
     if provider_name == "anthropic":
         return AnthropicProvider()
     raise ValueError(f"Unknown provider: {provider_name}")

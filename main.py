@@ -31,6 +31,7 @@ from rich.text import Text
 from rich import box
 
 import config
+from config import pick_gemini_models, get_key
 from services.api_client import build_provider
 from services.prompt_engine import request_spec
 from services.project_manager import create_project, save_assets, wait_for_audio
@@ -82,6 +83,19 @@ def main() -> None:
     if not config.validate_and_prompt_keys(provider_name):
         sys.exit(1)
 
+    # 2b ── Gemini model selection (live list from the API) ─────────────────
+    gemini_text_model = config.GEMINI_TEXT_MODEL
+    gemini_image_model = config.GEMINI_IMAGE_MODEL
+    if provider_name == "gemini":
+        console.print("\n[bold cyan]Fetching available Gemini models…[/bold cyan]")
+        gemini_text_model, gemini_image_model = pick_gemini_models(
+            get_key("GEMINI_API_KEY")
+        )
+        console.print(
+            f"  [green]✔[/green] Text  model : [bold]{gemini_text_model}[/bold]\n"
+            f"  [green]✔[/green] Image model : [bold]{gemini_image_model}[/bold]\n"
+        )
+
     # 3 ── Song details ─────────────────────────────────────────────────────
     concept = inquirer.text(
         message="Describe your song concept:",
@@ -97,7 +111,11 @@ def main() -> None:
     # 4 ── Generate spec via LLM ────────────────────────────────────────────
     console.print()
     with console.status("[bold green]Generating production spec…[/bold green]"):
-        provider = build_provider(provider_name)
+        provider = build_provider(
+            provider_name,
+            gemini_text_model=gemini_text_model,
+            gemini_image_model=gemini_image_model,
+        )
         spec = request_spec(provider, concept, style)
 
     console.print(Panel(

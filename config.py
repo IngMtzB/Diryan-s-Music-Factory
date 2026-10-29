@@ -8,7 +8,6 @@ the user interactively when keys are missing.
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv, set_key
@@ -28,13 +27,111 @@ PROVIDER_KEYS: dict[str, list[str]] = {
     "anthropic": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"],
 }
 
-# Model identifiers
-GEMINI_TEXT_MODEL = "gemini-2.5-flash"
-GEMINI_IMAGE_MODEL = "imagen-3.0-generate-002"
+# Static fallback model identifiers (used when dynamic listing is skipped)
+GEMINI_TEXT_MODEL = "gemini-flash-latest"
+GEMINI_IMAGE_MODEL = "gemini-flash-image-generation"
 ANTHROPIC_TEXT_MODEL = "claude-3-5-sonnet-20241022"
 DALLE_MODEL = "dall-e-3"
 
 console = Console()
+
+# ── Gemini model discovery ─────────────────────────────────────────────────────
+
+# Keywords that identify image-generation–capable models vs. text-generation.
+# The Gemini model list uses `supported_actions` or model-name conventions;
+# we rely on name-based heuristics since the API does not expose a stable
+# capability field in the Developer tier.
+_IMAGE_MODEL_KEYWORDS = ("image", "imagen", "img")
+_TEXT_SKIP_KEYWORDS = ("embed", "aqa", "tts", "speech", "vision-only")
+
+
+def fetch_gemini_models(api_key: str) -> tuple[list[str], list[str]]:
+    """
+    Query the live Gemini model list and split into text and image buckets.
+
+    Returns:
+        (text_models, image_models) — each a list of model name strings,
+        sorted alphabetically with stable/latest aliases first.
+    """
+    try:
+        from google import genai
+
+        client = genai.Client(api_key=api_key)
+        all_models: list[str] = []
+        for m in client.models.list():
+            name: str = m.name  # e.g. "models/gemini-flash-latest"
+            # Strip the "models/" prefix for display / usage
+            short = name.removeprefix("models/")
+            all_models.append(short)
+    except Exception as exc:
+        console.print(f"[yellow]⚠  Could not fetch model list: {exc}[/yellow]")
+        return [], []
+
+    text_models: list[str] = []
+    image_models: list[str] = []
+
+    for name in sorted(all_models):
+        lower = name.lower()
+        if any(kw in lower for kw in _TEXT_SKIP_KEYWORDS):
+            continue
+        if any(kw in lower for kw in _IMAGE_MODEL_KEYWORDS):
+            image_models.append(name)
+        else:
+            text_models.append(name)
+
+    # Put "latest" aliases at the top for each bucket
+    def _sort_key(n: str) -> tuple[int, str]:
+        return (0 if "latest" in n else 1, n)
+
+    text_models.sort(key=_sort_key)
+    image_models.sort(key=_sort_key)
+    return text_models, image_models
+
+
+def pick_gemini_models(api_key: str) -> tuple[str, str]:
+    """
+    Interactively ask the user to choose a Gemini text model and image model
+    from the live model list.  Falls back to the static defaults if the list
+    is empty or the user presses Ctrl-C.
+
+    Returns:
+        (text_model, image_model)
+    """
+    text_models, image_models = fetch_gemini_models(api_key)
+
+    # ── Text model picker ──────────────────────────────────────────────────
+    if text_models:
+        text_model: str = inquirer.select(
+            message="Select Gemini text model:",
+            choices=text_models,
+            default=next(
+                (m for m in text_models if "flash-latest" in m or "flash" in m),
+                text_models[0],
+            ),
+        ).execute()
+    else:
+        console.print(
+            f"[yellow]No text models found — using default: {GEMINI_TEXT_MODEL}[/yellow]"
+        )
+        text_model = GEMINI_TEXT_MODEL
+
+    # ── Image model picker ─────────────────────────────────────────────────
+    if image_models:
+        image_model: str = inquirer.select(
+            message="Select Gemini image model:",
+            choices=image_models,
+            default=next(
+                (m for m in image_models if "flash" in m),
+                image_models[0],
+            ),
+        ).execute()
+    else:
+        console.print(
+            f"[yellow]No image models found — using default: {GEMINI_IMAGE_MODEL}[/yellow]"
+        )
+        image_model = GEMINI_IMAGE_MODEL
+
+    return text_model, image_model
 
 
 # ── Key helpers ────────────────────────────────────────────────────────────────
