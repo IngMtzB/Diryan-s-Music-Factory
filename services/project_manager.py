@@ -55,9 +55,17 @@ def create_project(concept: str) -> Path:
 
 
 def save_spec(project_dir: Path, spec: dict[str, Any]) -> None:
-    """Save 01_styles.json and 02_lyrics.txt into *project_dir*."""
+    """
+    Save project metadata files into *project_dir*:
+    - 01_styles.json: Technical render_spec and image_prompt
+    - 02_lyrics.txt:  Plain-text lyrics
+    - styles.txt:     Suno-ready comma-separated musical style prompt
+    - Data.txt:       YouTube/Social metadata (Title, Description with lyrics, Hashtags)
+    """
     styles_path = project_dir / "01_styles.json"
     styles_payload = {
+        "title": spec.get("title", ""),
+        "suno_styles": spec.get("suno_styles", ""),
         "image_prompt": spec.get("image_prompt", ""),
         "render_spec": spec.get("render_spec", {}),
     }
@@ -70,6 +78,26 @@ def save_spec(project_dir: Path, spec: dict[str, Any]) -> None:
     lyrics_path = project_dir / "02_lyrics.txt"
     lyrics_path.write_text(spec.get("lyrics", ""), encoding="utf-8")
     console.print(f"[green]✔[/green]  Saved [bold]{lyrics_path.name}[/bold]")
+
+    # 3 ── styles.txt (Suno AI prompt) ─────────────────────────────────────
+    suno_styles = spec.get("suno_styles", "").strip()
+    if suno_styles:
+        suno_file = project_dir / "styles.txt"
+        suno_file.write_text(suno_styles, encoding="utf-8")
+        console.print(f"[green]✔[/green]  Saved [bold]{suno_file.name}[/bold] (Suno style prompt)")
+
+    # 4 ── Data.txt (Title, Description with lyrics, Hashtags) ─────────────
+    title = spec.get("title", "").strip()
+    desc = spec.get("description", "").strip()
+    hashtags = spec.get("hashtags", "").strip()
+    data_content = (
+        f"TITLE:\n{title}\n\n"
+        f"DESCRIPTION:\n{desc}\n\n"
+        f"HASHTAGS:\n{hashtags}\n"
+    )
+    data_file = project_dir / "Data.txt"
+    data_file.write_text(data_content, encoding="utf-8")
+    console.print(f"[green]✔[/green]  Saved [bold]{data_file.name}[/bold] (Title, Description & Hashtags)")
 
 
 def save_background(project_dir: Path, background_bytes: bytes) -> Path:

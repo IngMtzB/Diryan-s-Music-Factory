@@ -7,18 +7,28 @@ Flow
 1. Resume check (SQLite-backed session recovery) or New Project.
 2. Select AI provider (Gemini or Anthropic) & validate API keys.
 3. Collect song concept & style from user.
-4. Generate JSON spec (lyrics + image prompt + render params).
+4. Generate JSON spec (lyrics + image prompt + Suno styles + metadata).
 5. Generate background image via the selected provider.
-6. Save project assets to ``projects/<slug>/``.
+6. Save project assets to ``projects/<slug>/``:
+   - styles.txt (Suno prompt)
+   - Data.txt (Title, Description with lyrics, Hashtags)
+   - 01_styles.json, 02_lyrics.txt, 03_background.png
 7. Wait for the user to drop ``03_song.mp3`` into the folder.
-8. Render 16:9 + 9:16 music videos with audio-reactive overlays.
+8. Interactive visualizer configuration (waveform style, auto-palette, shake, pulse).
+9. Render 16:9 + 9:16 music videos with multi-band audio-reactive overlays.
 """
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+# Ensure UTF-8 output on Windows consoles to prevent UnicodeEncodeError
+if sys.stdout is not None and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr is not None and hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # Ensure package root is on sys.path so sibling imports work.
 _ROOT = Path(__file__).resolve().parent
@@ -32,7 +42,12 @@ from rich.panel import Panel
 from rich.text import Text
 
 import config
-from config import get_key, pick_gemini_models
+from config import (
+    get_key,
+    pick_gemini_image_model,
+    pick_gemini_models,
+    pick_gemini_text_model,
+)
 from services.api_client import ProviderClient, build_provider
 from services.checkpoint import CheckpointManager, find_resumable_sessions
 from services.project_manager import (
@@ -42,7 +57,7 @@ from services.project_manager import (
     wait_for_audio,
 )
 from services.prompt_engine import request_spec
-from video.renderer import render
+from video.renderer import extract_palette_from_image, render
 
 console = Console()
 
@@ -91,15 +106,12 @@ def _prompt_session_choice() -> tuple[CheckpointManager | None, Path | None, dic
     ).execute()
 
     if choice == "new":
-        # Close any open connections from search
         for s in resumable:
             s["checkpoint_manager"].close()
         return None, None, {}
 
-    # Resuming selected session
     selected: dict[str, Any] = choice
     cp: CheckpointManager = selected["checkpoint_manager"]
-    # Close other connections
     for s in resumable:
         if s is not selected:
             s["checkpoint_manager"].close()
@@ -123,12 +135,17 @@ def _select_provider(default_val: str = "gemini") -> str:
     return choice
 
 
-# ── Step Executor with Retry Support ──────────────────────────────────────────
+# ── Step Executor with Retry & Change-Model Support ────────────────────────────
 
-def _execute_with_retry(step_name: str, cp: CheckpointManager, action_fn: Any) -> Any:
+def _execute_with_retry(
+    step_name: str,
+    cp: CheckpointManager,
+    action_fn: Any,
+    on_change_model: Callable[[], None] | None = None,
+) -> Any:
     """
     Execute a pipeline step. If an error occurs, save failed status to SQLite
-    and offer the user an immediate Retry or Exit choice.
+    and offer immediate Retry, Model Change, or Exit.
     """
     while True:
         try:
@@ -146,21 +163,183 @@ def _execute_with_retry(step_name: str, cp: CheckpointManager, action_fn: Any) -
                 border_style="red",
             ))
 
+            choices: list[dict[str, Any]] = [
+                {"name": "🔄 Retry this step", "value": "retry"},
+            ]
+            if on_change_model is not None:
+                choices.append({"name": "⚙️ Change model and retry", "value": "change_model"})
+            choices.append({"name": "🛑 Exit for now (you can resume later)", "value": "exit"})
+
             choice = inquirer.select(
                 message=f"How would you like to handle the error at {step_name}?",
-                choices=[
-                    {"name": "🔄 Retry this step", "value": "retry"},
-                    {"name": "🛑 Exit for now (you can resume later)", "value": "exit"},
-                ],
+                choices=choices,
                 default="retry",
             ).execute()
 
             if choice == "retry":
                 console.print(f"[cyan]Retrying {step_name}…[/cyan]\n")
                 continue
+            elif choice == "change_model" and on_change_model is not None:
+                on_change_model()
+                console.print(f"[cyan]Model updated. Retrying {step_name}…[/cyan]\n")
+                continue
             else:
                 console.print("\n[yellow]Exiting. Progress safely preserved in session.db.[/yellow]")
                 sys.exit(1)
+
+
+# ── Interactive Visualizer Configuration ───────────────────────────────────────
+
+def _configure_visualizer_interactive(
+    project_dir: Path, default_spec: dict[str, Any]
+) -> dict[str, Any]:
+    """
+    Allow the user to interactively choose waveform style, color palette,
+    camera bass shake, and beat pulse before rendering video.
+    """
+    console.print()
+    console.rule("[bold magenta]🎬 Video Visualizer Customization[/bold magenta]")
+    console.print("[dim]Configure the audio-reactive effects to match your style:[/dim]\n")
+
+    # 1. Waveform style
+    style = inquirer.select(
+        message="Select waveform visual style:",
+        choices=[
+            {
+                "name": "✨ Mirrored Center Spectrum (Cinematic, Bass in Center — Recommended)",
+                "value": "mirrored_bars",
+            },
+            {
+                "name": "📊 Frequency Bars (Left to Right: Bass → Mid → Treble)",
+                "value": "frequency_bars",
+            },
+            {
+                "name": "🎛️ Segmented Equalizer (Retro Digital LED Blocks)",
+                "value": "equalizer",
+            },
+            {
+                "name": "〰️ Neon Glowing Wave Curve",
+                "value": "neon_glow_line",
+            },
+            {
+                "name": "🚫 Clean (No waveform — Camera shake & beat pulse only)",
+                "value": "none",
+            },
+        ],
+        default="mirrored_bars",
+    ).execute()
+
+    # 2. Color Palette
+    primary = "#00E5FF"
+    secondary = "#FF2A55"
+
+    if style != "none":
+        bg_path = project_dir / "03_background.png"
+        auto_c1, auto_c2 = extract_palette_from_image(bg_path)
+
+        palette_choice = inquirer.select(
+            message="Select waveform color palette:",
+            choices=[
+                {
+                    "name": f"🎨 Auto-Sample from Background Art ({auto_c1} & {auto_c2}) — Recommended",
+                    "value": "auto",
+                },
+                {
+                    "name": "🌌 Cyberpunk Neon (Cyan #00E5FF & Hot Red #FF2A55)",
+                    "value": "cyberpunk",
+                },
+                {
+                    "name": "👑 Regal Gold & Amber (#FFD700 & #FF8C00)",
+                    "value": "gold",
+                },
+                {
+                    "name": "🔮 Vaporwave (Electric Violet #9D00FF & Neon Pink #FF007F)",
+                    "value": "vaporwave",
+                },
+                {
+                    "name": "🧊 Ice Cyan & Pure White (#00F0FF & #FFFFFF)",
+                    "value": "ice",
+                },
+                {
+                    "name": "🤖 Keep AI Suggested Colors",
+                    "value": "spec",
+                },
+            ],
+            default="auto",
+        ).execute()
+
+        if palette_choice == "auto":
+            primary, secondary = auto_c1, auto_c2
+        elif palette_choice == "cyberpunk":
+            primary, secondary = "#00E5FF", "#FF2A55"
+        elif palette_choice == "gold":
+            primary, secondary = "#FFD700", "#FF8C00"
+        elif palette_choice == "vaporwave":
+            primary, secondary = "#9D00FF", "#FF007F"
+        elif palette_choice == "ice":
+            primary, secondary = "#00F0FF", "#FFFFFF"
+        else:
+            wf = default_spec.get("waveform", {})
+            primary = wf.get("primary_color", "#00E5FF")
+            secondary = wf.get("secondary_color", "#FF2A55")
+
+    # 3. Waveform Position
+    position = "bottom"
+    if style != "none":
+        position = inquirer.select(
+            message="Waveform position on screen:",
+            choices=[
+                {"name": "⬇️ Bottom (Lower third — Recommended)", "value": "bottom"},
+                {"name": "⏺️ Center (Vertically centered)", "value": "center"},
+            ],
+            default="bottom",
+        ).execute()
+
+    # 4. Camera Shake Intensity
+    shake_choice = inquirer.select(
+        message="Camera Bass Shake intensity (reacts to heavy 808s & kicks):",
+        choices=[
+            {"name": "⚡ Dynamic Medium (6px punch — Recommended)", "value": 6},
+            {"name": "🔥 Hardcore Punch (12px intense bass shake)", "value": 12},
+            {"name": "🌊 Subtle (3px gentle shake)", "value": 3},
+            {"name": "🚫 Disabled (Steady frame)", "value": 0},
+        ],
+        default=6,
+    ).execute()
+
+    # 5. Beat Pulse
+    pulse_choice = inquirer.select(
+        message="Background brightness beat pulse:",
+        choices=[
+            {"name": "✨ Enabled (Subtle brightness surge on beat drops)", "value": True},
+            {"name": "🚫 Disabled", "value": False},
+        ],
+        default=True,
+    ).execute()
+
+    configured_spec = {
+        "waveform": {
+            "style": style,
+            "position": position,
+            "primary_color": primary,
+            "secondary_color": secondary,
+            "bar_count": 48,
+        },
+        "motion_effects": {
+            "bass_shake": shake_choice > 0,
+            "shake_intensity_px": shake_choice,
+            "background_pulse": pulse_choice,
+        },
+    }
+
+    console.print(
+        f"\n[green]✔ Configuration applied:[/green] "
+        f"Style: [bold]{style}[/bold] | "
+        f"Colors: [cyan]{primary}[/cyan] & [magenta]{secondary}[/magenta] | "
+        f"Shake: [yellow]{shake_choice}px[/yellow] | "
+        f"Pulse: [yellow]{pulse_choice}[/yellow]\n"
+    )
+    return configured_spec
 
 
 # ── Main flow ──────────────────────────────────────────────────────────────────
@@ -180,11 +359,10 @@ def main() -> None:
         ))
         provider_name = meta.get("provider", "gemini")
         concept = meta.get("concept", project_dir.name)
-        style = meta.get("style", "Lo-fi Hip-Hop")
+        style = meta.get("style", "Electro corrido tumbado")
         gemini_text_model = meta.get("gemini_text_model", config.GEMINI_TEXT_MODEL)
         gemini_image_model = meta.get("gemini_image_model", config.GEMINI_IMAGE_MODEL)
 
-        # Validate API keys for the resumed provider
         if not config.validate_and_prompt_keys(provider_name):
             sys.exit(1)
     else:
@@ -221,7 +399,6 @@ def main() -> None:
             default="Electro corrido tumbado",
         ).execute()
 
-        # Initialize project folder & SQLite checkpoint manager immediately
         project_dir = create_project(concept)
         cp = CheckpointManager(project_dir)
         cp.save_meta(
@@ -244,22 +421,55 @@ def main() -> None:
     # 4 ── Step: Generate spec via LLM ──────────────────────────────────────
     if not cp.is_done("SPEC_GENERATED"):
         console.print()
+
         def _generate_spec_action() -> dict[str, Any]:
-            with console.status("[bold green]Generating production spec…[/bold green]"):
+            with console.status("[bold green]Generating production spec, Suno styles & lyrics…[/bold green]"):
                 prov = _get_provider()
                 res = request_spec(prov, concept, style)
                 save_spec(project_dir, res)
                 cp.mark_done("SPEC_GENERATED", res)
                 return res
 
-        spec = _execute_with_retry("SPEC_GENERATED", cp, _generate_spec_action)
+        def _on_change_text_model() -> None:
+            nonlocal gemini_text_model
+            if provider_name == "gemini":
+                gemini_text_model = pick_gemini_text_model(
+                    get_key("GEMINI_API_KEY"), current_model=gemini_text_model
+                )
+                cp.save_meta(gemini_text_model=gemini_text_model)
+                console.print(f"[green]✔ Switched Gemini text model to:[/green] [bold]{gemini_text_model}[/bold]")
+
+        spec = _execute_with_retry(
+            "SPEC_GENERATED",
+            cp,
+            _generate_spec_action,
+            on_change_model=_on_change_text_model if provider_name == "gemini" else None,
+        )
     else:
         spec = cp.load_data("SPEC_GENERATED")
         console.print("[dim]↩ Loaded spec from SQLite checkpoint.[/dim]")
 
+    # Display Suno Style prompt panel
+    suno_styles = spec.get("suno_styles", "").strip()
+    if suno_styles:
+        console.print(Panel(
+            f"[bold yellow]{suno_styles}[/bold yellow]\n\n"
+            f"[dim]📁 Saved to: [bold]{(project_dir / 'styles.txt')}[/bold][/dim]",
+            title="🎵 Suno AI Style Prompt (Copy & Paste to Suno)",
+            border_style="yellow",
+            box=box.ROUNDED,
+        ))
+
+    # Display Production Metadata & Lyrics Preview
+    title_text = spec.get("title", concept)
+    hashtags_text = spec.get("hashtags", "")
     console.print(Panel(
-        spec["lyrics"][:500] + ("…" if len(spec["lyrics"]) > 500 else ""),
-        title="📝 Lyrics Preview",
+        f"[bold cyan]Title:[/bold cyan] {title_text}\n\n"
+        f"[bold cyan]Lyrics Preview:[/bold cyan]\n"
+        f"{spec['lyrics'][:450]}…\n\n"
+        f"[bold cyan]Hashtags:[/bold cyan] {hashtags_text}\n\n"
+        f"[dim]📁 Complete metadata, story & lyrics saved to: [bold]{(project_dir / 'Data.txt')}[/bold][/dim]",
+        title="📝 Production Metadata & Social Data",
         border_style="cyan",
         box=box.ROUNDED,
     ))
@@ -275,15 +485,27 @@ def main() -> None:
                 cp.mark_done("IMAGE_GENERATED", {"path": str(bg_img_path)})
                 return img_bytes
 
-        _execute_with_retry("IMAGE_GENERATED", cp, _generate_image_action)
+        def _on_change_image_model() -> None:
+            nonlocal gemini_image_model
+            if provider_name == "gemini":
+                gemini_image_model = pick_gemini_image_model(
+                    get_key("GEMINI_API_KEY"), current_model=gemini_image_model
+                )
+                cp.save_meta(gemini_image_model=gemini_image_model)
+                console.print(f"[green]✔ Switched Gemini image model to:[/green] [bold]{gemini_image_model}[/bold]")
+
+        _execute_with_retry(
+            "IMAGE_GENERATED",
+            cp,
+            _generate_image_action,
+            on_change_model=_on_change_image_model if provider_name == "gemini" else None,
+        )
     else:
         console.print(f"[dim]↩ Background image already created: [bold]{bg_img_path.name}[/bold][/dim]")
 
     # 6 ── Step: Assets saved confirmation ──────────────────────────────────
     if not cp.is_done("ASSETS_SAVED"):
-        # Ensure all three files are on disk
-        if not (project_dir / "01_styles.json").exists() or not (project_dir / "02_lyrics.txt").exists():
-            save_spec(project_dir, spec)
+        save_spec(project_dir, spec)
         cp.mark_done("ASSETS_SAVED")
 
     # 7 ── Step: Wait for audio ─────────────────────────────────────────────
@@ -298,13 +520,17 @@ def main() -> None:
     else:
         console.print(f"[dim]↩ Audio file verified: [bold]{audio_path.name}[/bold][/dim]")
 
-    # 8 ── Step: Render video ───────────────────────────────────────────────
+    # 8 ── Step: Render video (with interactive customization) ──────────────
     if not cp.is_done("VIDEO_RENDERED"):
-        console.print()
+        # Interactive customization for waveform style, color palette, shake & pulse
+        custom_render_spec = _configure_visualizer_interactive(
+            project_dir, spec.get("render_spec", {})
+        )
+
         console.rule("[bold magenta]Video Rendering Pipeline[/bold magenta]")
 
         def _render_action() -> tuple[Path, Path]:
-            v16x9, v9x16 = render(project_dir)
+            v16x9, v9x16 = render(project_dir, custom_render_spec=custom_render_spec)
             cp.mark_done(
                 "VIDEO_RENDERED",
                 {"out_16x9": str(v16x9), "out_9x16": str(v9x16)},
@@ -324,7 +550,9 @@ def main() -> None:
         f"[green bold]✅ All done![/green bold]\n\n"
         f"  📺 Landscape : [cyan]{out_16x9}[/cyan]\n"
         f"  📱 Portrait  : [cyan]{out_9x16}[/cyan]\n\n"
-        f"  📁 Project   : [cyan]{project_dir}[/cyan]",
+        f"  📁 Project   : [cyan]{project_dir}[/cyan]\n"
+        f"  🎵 Suno Style: [cyan]{project_dir / 'styles.txt'}[/cyan]\n"
+        f"  📝 Socials   : [cyan]{project_dir / 'Data.txt'}[/cyan]",
         title="🎬 Render Complete",
         border_style="green",
         box=box.DOUBLE,
@@ -350,5 +578,3 @@ if __name__ == "__main__":
         except (KeyboardInterrupt, EOFError):
             pass
         sys.exit(1)
-
-

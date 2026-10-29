@@ -21,19 +21,23 @@ You MUST reply with **only** a single JSON object (no markdown fences, no
 commentary) that conforms exactly to this schema:
 
 {
+  "title": "<creative and catchy song title matching the concept>",
+  "suno_styles": "<comma-separated list of 8-12 specific tags for Suno AI music generation, including subgenres, primary acoustic & electronic instruments, rhythm/bpm feel, bass style, mood, and production texture. e.g. 'electro corrido tumbado, corrido tumbado, regional mexicano, electronic trap beat, heavy synth bass, melancholic requinto, fat 808 sub-bass, futuristic regional, dark atmospheric synths, crisp snappy drums'>",
   "lyrics": "<full song lyrics as a single string, section headers in [brackets], lines separated by \\n>",
+  "description": "<an engaging YouTube/TikTok/Instagram description explaining the vibe/story of the song, followed by the complete lyrics, credits, and call to action>",
+  "hashtags": "<8 to 15 relevant space-separated hashtags, e.g. '#ElectroCorrido #CorridosTumbados #TrapLatino #RegionalMexicano #ViralMusic'>",
   "image_prompt": "<a vivid, genre-matched 16:9 background image generation prompt that follows the visual rules, keeping the lower 25% dark/simple for overlay space>",
   "render_spec": {
     "waveform": {
-      "style": "<rounded_bars | equalizer>",
+      "style": "<frequency_bars | mirrored_bars | equalizer | neon_glow_line | none>",
       "position": "<bottom | center>",
-      "primary_color": "<hex color>",
-      "secondary_color": "<hex color>",
-      "bar_count": <int 20-80>
+      "primary_color": "<hex color matching the scene vibe>",
+      "secondary_color": "<hex color matching the scene accent>",
+      "bar_count": <int 24-64>
     },
     "motion_effects": {
       "bass_shake": <true | false>,
-      "shake_intensity_px": <int 0-12>,
+      "shake_intensity_px": <int 0-14>,
       "background_pulse": <true | false>
     }
   }
@@ -111,10 +115,24 @@ def request_spec(
     console.print("[dim]Sending prompt to LLM…[/dim]")
     spec = provider_client.generate_spec(system_prompt, user_prompt)
 
-    # Quick sanity checks
+    # Quick sanity checks and intelligent defaults
     for key in ("lyrics", "image_prompt", "render_spec"):
         if key not in spec:
             raise KeyError(f"LLM response missing required key: '{key}'")
+
+    if not spec.get("title"):
+        spec["title"] = concept[:40].strip().title()
+
+    if not spec.get("suno_styles"):
+        spec["suno_styles"] = f"{style.lower()}, acoustic and electronic elements, modern production, clear vocals, punchy rhythm"
+
+    if not spec.get("description"):
+        lyrics = spec.get("lyrics", "")
+        spec["description"] = f"{concept}\n\nStyle: {style}\n\nLyrics:\n{lyrics}"
+
+    if not spec.get("hashtags"):
+        slug_genre = "".join(w.capitalize() for w in style.split() if w.isalnum())
+        spec["hashtags"] = f"#{slug_genre} #NewMusic #AIGeneratedMusic #DiryansMusicFactory"
 
     return spec
 

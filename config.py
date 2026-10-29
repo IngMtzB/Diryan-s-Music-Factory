@@ -8,7 +8,14 @@ the user interactively when keys are missing.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+
+# Ensure UTF-8 output on Windows consoles to prevent UnicodeEncodeError
+if sys.stdout is not None and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if sys.stderr is not None and hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 from dotenv import load_dotenv, set_key
 from InquirerPy import inquirer
@@ -42,7 +49,18 @@ console = Console()
 # we rely on name-based heuristics since the API does not expose a stable
 # capability field in the Developer tier.
 _IMAGE_MODEL_KEYWORDS = ("image", "imagen", "img")
-_TEXT_SKIP_KEYWORDS = ("embed", "aqa", "tts", "speech", "vision-only")
+_TEXT_SKIP_KEYWORDS = (
+    "embed",
+    "aqa",
+    "tts",
+    "speech",
+    "vision-only",
+    "audio",
+    "native-audio",
+    "live",
+    "bidi",
+    "realtime",
+)
 
 
 def fetch_gemini_models(api_key: str) -> tuple[list[str], list[str]]:
@@ -88,49 +106,57 @@ def fetch_gemini_models(api_key: str) -> tuple[list[str], list[str]]:
     return text_models, image_models
 
 
+def pick_gemini_text_model(api_key: str, current_model: str | None = None) -> str:
+    """Interactively select a Gemini text generation model."""
+    text_models, _ = fetch_gemini_models(api_key)
+    if not text_models:
+        console.print(
+            f"[yellow]No text models found — using default: {GEMINI_TEXT_MODEL}[/yellow]"
+        )
+        return GEMINI_TEXT_MODEL
+
+    default_choice = current_model if (current_model and current_model in text_models) else next(
+        (m for m in text_models if "flash-latest" in m or "flash" in m),
+        text_models[0],
+    )
+    return inquirer.select(
+        message="Select Gemini text model:",
+        choices=text_models,
+        default=default_choice,
+    ).execute()
+
+
+def pick_gemini_image_model(api_key: str, current_model: str | None = None) -> str:
+    """Interactively select a Gemini image generation model."""
+    _, image_models = fetch_gemini_models(api_key)
+    if not image_models:
+        console.print(
+            f"[yellow]No image models found — using default: {GEMINI_IMAGE_MODEL}[/yellow]"
+        )
+        return GEMINI_IMAGE_MODEL
+
+    default_choice = current_model if (current_model and current_model in image_models) else next(
+        (m for m in image_models if "flash" in m),
+        image_models[0],
+    )
+    return inquirer.select(
+        message="Select Gemini image model:",
+        choices=image_models,
+        default=default_choice,
+    ).execute()
+
+
 def pick_gemini_models(api_key: str) -> tuple[str, str]:
     """
     Interactively ask the user to choose a Gemini text model and image model
-    from the live model list.  Falls back to the static defaults if the list
-    is empty or the user presses Ctrl-C.
+    from the live model list. Falls back to the static defaults if the list
+    is empty.
 
     Returns:
         (text_model, image_model)
     """
-    text_models, image_models = fetch_gemini_models(api_key)
-
-    # ── Text model picker ──────────────────────────────────────────────────
-    if text_models:
-        text_model: str = inquirer.select(
-            message="Select Gemini text model:",
-            choices=text_models,
-            default=next(
-                (m for m in text_models if "flash-latest" in m or "flash" in m),
-                text_models[0],
-            ),
-        ).execute()
-    else:
-        console.print(
-            f"[yellow]No text models found — using default: {GEMINI_TEXT_MODEL}[/yellow]"
-        )
-        text_model = GEMINI_TEXT_MODEL
-
-    # ── Image model picker ─────────────────────────────────────────────────
-    if image_models:
-        image_model: str = inquirer.select(
-            message="Select Gemini image model:",
-            choices=image_models,
-            default=next(
-                (m for m in image_models if "flash" in m),
-                image_models[0],
-            ),
-        ).execute()
-    else:
-        console.print(
-            f"[yellow]No image models found — using default: {GEMINI_IMAGE_MODEL}[/yellow]"
-        )
-        image_model = GEMINI_IMAGE_MODEL
-
+    text_model = pick_gemini_text_model(api_key)
+    image_model = pick_gemini_image_model(api_key)
     return text_model, image_model
 
 
