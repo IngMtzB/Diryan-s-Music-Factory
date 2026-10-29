@@ -94,13 +94,17 @@ def _prompt_session_choice() -> tuple[CheckpointManager | None, Path | None, dic
     ]
     for s in resumable:
         concept_disp = (s["concept"][:35] + "…") if len(s["concept"]) > 35 else s["concept"]
+        if s.get("is_complete"):
+            label = f"🎬 Open / Re-render: {s['name']} (Completed | Concept: {concept_disp})"
+        else:
+            label = f"🔄 Resume: {s['name']} (Step: {s['next_step']} | Concept: {concept_disp})"
         choices.append({
-            "name": f"🔄 Resume: {s['name']} (Step: {s['next_step']} | Concept: {concept_disp})",
+            "name": label,
             "value": s,
         })
 
     choice = inquirer.select(
-        message="Active projects found. Would you like to resume?",
+        message="Active song projects found. Choose an option:",
         choices=choices,
         default="new",
     ).execute()
@@ -199,7 +203,8 @@ def _configure_visualizer_interactive(
     """
     console.print()
     console.rule("[bold magenta]🎬 Video Visualizer Customization[/bold magenta]")
-    console.print("[dim]Configure the audio-reactive effects to match your style:[/dim]\n")
+    console.print("[dim]Configure the audio-reactive effects to match your style:[/dim]")
+    console.print("[dim]💡 Local GPU/CPU rendering — consumes [bold green]0 AI tokens[/bold green].[/dim]\n")
 
     # 1. Waveform style
     style = inquirer.select(
@@ -542,21 +547,134 @@ def main() -> None:
         data = cp.load_data("VIDEO_RENDERED")
         out_16x9 = Path(data.get("out_16x9", project_dir / "04_video_16x9.mp4"))
         out_9x16 = Path(data.get("out_9x16", project_dir / "04_video_9x16.mp4"))
+        console.print(f"[dim]↩ Loaded existing video files: {out_16x9.name}, {out_9x16.name}[/dim]")
+
+    # ── Interactive Post-Render Loop & Re-generation Menu ─────────────────
+    while True:
+        console.print()
+        console.print(Panel(
+            f"[green bold]✅ Project Assets & Videos Ready![/green bold]\n\n"
+            f"  📺 Landscape : [cyan]{out_16x9}[/cyan]\n"
+            f"  📱 Portrait  : [cyan]{out_9x16}[/cyan]\n\n"
+            f"  📁 Project   : [cyan]{project_dir}[/cyan]\n"
+            f"  🎵 Suno Style: [cyan]{project_dir / 'styles.txt'}[/cyan]\n"
+            f"  📝 Socials   : [cyan]{project_dir / 'Data.txt'}[/cyan]",
+            title="🎬 Render Complete",
+            border_style="green",
+            box=box.DOUBLE,
+        ))
+
+        action_choice = inquirer.select(
+            message="What would you like to do next?",
+            choices=[
+                {
+                    "name": "🚪 Complete & Exit (Keep current video)",
+                    "value": "exit",
+                },
+                {
+                    "name": "🎬 Re-render video (Tweak waveform, palette, camera shake) [⚡ 0 Tokens — Local & Free]",
+                    "value": "rerender_video",
+                },
+                {
+                    "name": "🖼️ Regenerate background image & re-render video [🎨 ~1,290 image tokens / 1 image call]",
+                    "value": "regen_image",
+                },
+            ],
+            default="exit",
+        ).execute()
+
+        if action_choice == "exit":
+            break
+
+        if action_choice == "rerender_video":
+            console.print("\n[cyan]ℹ️  Re-rendering video locally using OpenCV and FFmpeg (AMF GPU/CPU).[/cyan]")
+            console.print("[dim]Token consumption: 0 tokens (No API requests).[/dim]\n")
+            custom_render_spec = _configure_visualizer_interactive(
+                project_dir, spec.get("render_spec", {})
+            )
+            console.rule("[bold magenta]Video Re-rendering Pipeline[/bold magenta]")
+
+            def _rerender_action() -> tuple[Path, Path]:
+                v16x9, v9x16 = render(project_dir, custom_render_spec=custom_render_spec)
+                cp.mark_done(
+                    "VIDEO_RENDERED",
+                    {"out_16x9": str(v16x9), "out_9x16": str(v9x16)},
+                )
+                return v16x9, v9x16
+
+            out_16x9, out_9x16 = _execute_with_retry("VIDEO_RENDERED", cp, _rerender_action)
+            console.print("\n[green bold]✔ Video successfully re-rendered![/green bold]\n")
+
+        elif action_choice == "regen_image":
+            console.print()
+            console.print(Panel(
+                f"[bold yellow]Estimated Token / API Consumption:[/bold yellow]\n"
+                f"  • Gemini (Imagen 3)      : [bold]~1,290 tokens[/bold] per generated image\n"
+                f"  • Anthropic (DALL-E 3)   : [bold]1 image generation call[/bold] (~$0.04 - $0.08, 0 text tokens)\n"
+                f"  • Video rendering        : [bold green]0 tokens[/bold green] (100% local processing)\n",
+                title="🎨 Token Estimate: Regenerate Background Image",
+                border_style="yellow",
+            ))
+
+            current_prompt = spec.get("image_prompt", "")
+            img_choice = inquirer.select(
+                message="How would you like to generate the new image?",
+                choices=[
+                    {"name": f"✨ Use current prompt: \"{current_prompt[:50]}…\"", "value": "same"},
+                    {"name": "✏️ Edit the image prompt before generating", "value": "edit"},
+                    {"name": "🔙 Cancel (Go back)", "value": "cancel"},
+                ],
+                default="same",
+            ).execute()
+
+            if img_choice == "cancel":
+                continue
+
+            if img_choice == "edit":
+                current_prompt = inquirer.text(
+                    message="Edit image prompt:",
+                    default=current_prompt,
+                    validate=lambda v: len(v.strip()) > 0,
+                    invalid_message="Prompt cannot be empty.",
+                ).execute()
+                spec["image_prompt"] = current_prompt
+                save_spec(project_dir, spec)
+
+            def _regen_img_action() -> bytes:
+                with console.status("[bold green]Regenerating background image…[/bold green]"):
+                    prov = _get_provider()
+                    img_bytes = prov.generate_image(current_prompt)
+                    save_background(project_dir, img_bytes)
+                    cp.mark_done("IMAGE_GENERATED", {"path": str(bg_img_path)})
+                    return img_bytes
+
+            _execute_with_retry(
+                "IMAGE_GENERATED",
+                cp,
+                _regen_img_action,
+                on_change_model=_on_change_image_model if provider_name == "gemini" else None,
+            )
+            console.print(f"[green]✔ New background image saved: [bold]{bg_img_path.name}[/bold][/green]\n")
+
+            # Now re-configure and re-render video
+            custom_render_spec = _configure_visualizer_interactive(
+                project_dir, spec.get("render_spec", {})
+            )
+            console.rule("[bold magenta]Video Re-rendering Pipeline[/bold magenta]")
+
+            def _rerender_after_img_action() -> tuple[Path, Path]:
+                v16x9, v9x16 = render(project_dir, custom_render_spec=custom_render_spec)
+                cp.mark_done(
+                    "VIDEO_RENDERED",
+                    {"out_16x9": str(v16x9), "out_9x16": str(v9x16)},
+                )
+                return v16x9, v9x16
+
+            out_16x9, out_9x16 = _execute_with_retry("VIDEO_RENDERED", cp, _rerender_after_img_action)
+            console.print("\n[green bold]✔ Video re-rendered with new background art![/green bold]\n")
 
     # ── Done! ──────────────────────────────────────────────────────────────
     cp.close()
-    console.print()
-    console.print(Panel(
-        f"[green bold]✅ All done![/green bold]\n\n"
-        f"  📺 Landscape : [cyan]{out_16x9}[/cyan]\n"
-        f"  📱 Portrait  : [cyan]{out_9x16}[/cyan]\n\n"
-        f"  📁 Project   : [cyan]{project_dir}[/cyan]\n"
-        f"  🎵 Suno Style: [cyan]{project_dir / 'styles.txt'}[/cyan]\n"
-        f"  📝 Socials   : [cyan]{project_dir / 'Data.txt'}[/cyan]",
-        title="🎬 Render Complete",
-        border_style="green",
-        box=box.DOUBLE,
-    ))
 
 
 if __name__ == "__main__":

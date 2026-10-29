@@ -17,6 +17,7 @@ Pipeline
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -289,13 +290,29 @@ def _apply_pulse(frame: np.ndarray, rms: float) -> np.ndarray:
     return np.clip(frame.astype(np.float32) * boost, 0, 255).astype(np.uint8)
 
 
+# ── FFmpeg binary locator ─────────────────────────────────────────────────────
+
+def _get_ffmpeg_exe() -> str:
+    """Return path to ffmpeg binary from PATH or imageio_ffmpeg fallback."""
+    exe = shutil.which("ffmpeg")
+    if exe:
+        return exe
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        pass
+    return "ffmpeg"
+
+
 # ── Encoder detection ─────────────────────────────────────────────────────────
 
 def _detect_encoder() -> str:
     """Return ``h264_amf`` if available, else ``libx264``."""
+    ffmpeg_exe = _get_ffmpeg_exe()
     try:
         result = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-encoders"],
+            [ffmpeg_exe, "-hide_banner", "-encoders"],
             capture_output=True, text=True, timeout=10,
         )
         if "h264_amf" in result.stdout:
@@ -313,20 +330,40 @@ def _centre_crop_9x16(input_path: Path, output_path: Path, encoder: str) -> None
     """Crop the 16:9 video to 9:16 (portrait) centred."""
     console.print("[dim]Cropping 9:16 vertical version…[/dim]")
 
-    crop_w, crop_h = WIDTH_9x16, HEIGHT_9x16
+    ffmpeg_exe = _get_ffmpeg_exe()
+
+    # In 16:9 (1920x1080), a 9:16 crop box has height 1080 and width 1080*(9/16) = 607.5 -> 608.
+    # We crop the central 608x1080 window and scale up to target 1080x1920.
+    crop_w = int(HEIGHT_16x9 * 9 / 16)
+    if crop_w % 2 != 0:
+        crop_w += 1
+    crop_h = HEIGHT_16x9
     x_offset = (WIDTH_16x9 - crop_w) // 2
     y_offset = 0
 
+    filter_spec = f"crop={crop_w}:{crop_h}:{x_offset}:{y_offset},scale={WIDTH_9x16}:{HEIGHT_9x16}"
+
     cmd = [
-        "ffmpeg", "-y",
+        ffmpeg_exe, "-y",
         "-i", str(input_path),
-        "-vf", f"crop={crop_w}:{crop_h}:{x_offset}:{y_offset}",
+        "-vf", filter_spec,
         "-c:v", encoder,
+    ]
+    if encoder == "h264_amf":
+        cmd.extend(["-quality", "speed"])
+    elif encoder == "libx264":
+        cmd.extend(["-preset", "fast"])
+
+    cmd.extend([
         "-b:v", "6M",
         "-c:a", "aac", "-b:a", "192k",
         str(output_path),
-    ]
-    subprocess.run(cmd, capture_output=True, timeout=600)
+    ])
+    res = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    if res.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg vertical crop failed (exit code {res.returncode}):\n{res.stderr}"
+        )
 
 
 # ── Main render entry point ───────────────────────────────────────────────────
@@ -415,7 +452,7 @@ def render(
     # Write 16:9 video
     codec_args: dict[str, Any]
     if encoder == "h264_amf":
-        codec_args = {"codec": "h264_amf", "bitrate": "8M"}
+        codec_args = {"codec": "h264_amf", "preset": "speed", "bitrate": "8M"}
     else:
         codec_args = {"codec": "libx264", "preset": "fast", "bitrate": "8M"}
 

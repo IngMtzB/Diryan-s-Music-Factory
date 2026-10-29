@@ -102,6 +102,11 @@ class CheckpointManager:
         )
         self._conn.commit()
 
+    def reset_step(self, step: str) -> None:
+        """Clear a checkpoint step so it can be re-executed."""
+        self._conn.execute("DELETE FROM checkpoints WHERE step=?", (step,))
+        self._conn.commit()
+
     def load_data(self, step: str) -> Any:
         """Return deserialized data payload for a step."""
         row = self._conn.execute(
@@ -145,32 +150,31 @@ class CheckpointManager:
 
 def find_resumable_sessions() -> list[dict[str, Any]]:
     """
-    Search PROJECTS_DIR for existing session.db files that are not fully completed.
-    Returns a list of dicts with project directory, metadata, and next step.
+    Search PROJECTS_DIR for existing session.db files.
+    Returns a list of dicts with project directory, metadata, next step, and completion flag.
     """
     if not PROJECTS_DIR.exists():
         return []
 
-    resumable = []
+    sessions: list[dict[str, Any]] = []
     for db_path in PROJECTS_DIR.glob("*/session.db"):
         project_dir = db_path.parent
         try:
             cp = CheckpointManager(project_dir)
             first = cp.first_incomplete()
-            if not cp.is_done("VIDEO_RENDERED"):
-                meta = cp.load_meta()
-                resumable.append({
-                    "project_dir": project_dir,
-                    "name": project_dir.name,
-                    "next_step": first,
-                    "concept": meta.get("concept", project_dir.name),
-                    "provider": meta.get("provider", "unknown"),
-                    "checkpoint_manager": cp,
-                })
-            else:
-                cp.close()
+            is_complete = cp.is_done("VIDEO_RENDERED")
+            meta = cp.load_meta()
+            sessions.append({
+                "project_dir": project_dir,
+                "name": project_dir.name,
+                "next_step": "COMPLETE" if is_complete else first,
+                "concept": meta.get("concept", project_dir.name),
+                "provider": meta.get("provider", "unknown"),
+                "checkpoint_manager": cp,
+                "is_complete": is_complete,
+            })
         except Exception:
             continue
 
-    return resumable
+    return sessions
 
