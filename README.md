@@ -1,5 +1,3 @@
-<![CDATA[<div align="center">
-
 # 🎶 Diryan's Factory Music
 
 **AI-Driven Music Video Generator with Audio-Reactive Visual Overlays**
@@ -202,4 +200,3 @@ Diryans_factory_music/
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
-]]>
