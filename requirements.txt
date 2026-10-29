@@ -1,0 +1,22 @@
+# ── Core CLI & UX ──────────────────────────────────
+InquirerPy>=0.3.4
+rich>=13.7
+
+# ── Environment / Config ───────────────────────────
+python-dotenv>=1.0
+
+# ── AI Provider SDKs ──────────────────────────────
+google-genai>=1.0
+anthropic>=0.39
+openai>=1.50
+
+# ── Audio Analysis ─────────────────────────────────
+librosa>=0.10
+soundfile>=0.12
+
+# ── Video Rendering ───────────────────────────────
+moviepy>=2.0
+opencv-python>=4.9
+numpy>=1.26
+Pillow>=10.2
+
