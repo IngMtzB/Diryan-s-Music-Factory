@@ -54,6 +54,32 @@ def create_project(concept: str) -> Path:
     return project_dir
 
 
+def save_spec(project_dir: Path, spec: dict[str, Any]) -> None:
+    """Save 01_styles.json and 02_lyrics.txt into *project_dir*."""
+    styles_path = project_dir / "01_styles.json"
+    styles_payload = {
+        "image_prompt": spec.get("image_prompt", ""),
+        "render_spec": spec.get("render_spec", {}),
+    }
+    styles_path.write_text(
+        json.dumps(styles_payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    console.print(f"[green]✔[/green]  Saved [bold]{styles_path.name}[/bold]")
+
+    lyrics_path = project_dir / "02_lyrics.txt"
+    lyrics_path.write_text(spec.get("lyrics", ""), encoding="utf-8")
+    console.print(f"[green]✔[/green]  Saved [bold]{lyrics_path.name}[/bold]")
+
+
+def save_background(project_dir: Path, background_bytes: bytes) -> Path:
+    """Save 03_background.png into *project_dir* and return its Path."""
+    bg_path = project_dir / "03_background.png"
+    bg_path.write_bytes(background_bytes)
+    console.print(f"[green]✔[/green]  Saved [bold]{bg_path.name}[/bold]")
+    return bg_path
+
+
 def save_assets(
     project_dir: Path,
     spec: dict[str, Any],
@@ -66,27 +92,8 @@ def save_assets(
     - ``02_lyrics.txt``    – plain-text lyrics
     - ``03_background.png``– AI-generated background image
     """
-    # 1 ── styles JSON ──────────────────────────────────────────────────────
-    styles_path = project_dir / "01_styles.json"
-    styles_payload = {
-        "image_prompt": spec.get("image_prompt", ""),
-        "render_spec": spec.get("render_spec", {}),
-    }
-    styles_path.write_text(
-        json.dumps(styles_payload, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    console.print(f"[green]✔[/green]  Saved [bold]{styles_path.name}[/bold]")
-
-    # 2 ── lyrics text ─────────────────────────────────────────────────────
-    lyrics_path = project_dir / "02_lyrics.txt"
-    lyrics_path.write_text(spec.get("lyrics", ""), encoding="utf-8")
-    console.print(f"[green]✔[/green]  Saved [bold]{lyrics_path.name}[/bold]")
-
-    # 3 ── background image ────────────────────────────────────────────────
-    bg_path = project_dir / "03_background.png"
-    bg_path.write_bytes(background_bytes)
-    console.print(f"[green]✔[/green]  Saved [bold]{bg_path.name}[/bold]")
+    save_spec(project_dir, spec)
+    save_background(project_dir, background_bytes)
 
 
 def wait_for_audio(project_dir: Path, poll_interval: float = 2.0) -> Path:
