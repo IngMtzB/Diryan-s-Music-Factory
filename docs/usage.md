@@ -115,10 +115,10 @@ The image is saved as `03_background.png` in your project folder.
 
 ## Step 6 — Project Folder
 
-A new folder is created under `projects/` named after your concept:
+A new folder is created under `projects/` named after the **song title the AI generated** (not your concept). While the AI is still writing, it lives in a temporary `projects/_draft_<concept>/` folder that is renamed as soon as the title is known:
 
 ```
-projects/late_night_drive_through_a_glowing_city/
+projects/neon_infinito/
 ├── 01_styles.json       ← render_spec + image_prompt
 ├── 02_lyrics.txt        ← full lyrics
 └── 03_background.png    ← AI background image
@@ -138,6 +138,19 @@ The terminal prints the full path and waits:
 ╰──────────────────────────────────────────────────────────────────╯
 ⠸ Polling for 03_song.mp3…
 ```
+
+---
+
+### `Data.txt` — ready-to-paste YouTube & TikTok copy
+
+| Section | Field | Notes |
+|---|---|---|
+| 🎬 YouTube | `TITLE` | ≤ 100 chars, song title first + genre keywords, max 1 emoji |
+| | `DESCRIPTION` | Hook line first (≤ 150 chars, shown above "Show more"), then story, 🎵 lyrics, 🎧 credits, 🔔 call to action, hashtags |
+| | `TAGS` | Paste into YouTube Studio → Tags (comma-separated, ≤ 500 chars) |
+| 📱 TikTok | `CAPTION` | ≤ 150 chars, max 2 emojis, followed by 3 topic hashtags + `#corridosenhtml #musicadela403` |
+
+Emojis are capped automatically, so the copy stays clean even if the AI gets carried away. Use **📝 Regenerate Data.txt** in the post-render menu to rebuild it from the saved spec (0 tokens) or ask the AI for fresh copy.
 
 ---
 
@@ -197,10 +210,32 @@ Encoding uses `h264_amf` (AMD GPU) or `libx264` (CPU fallback).
 
 ## Waveform Style Reference
 
-| Style | Look |
+These are the options in the **"Select waveform visual style (form):"** menu. Each example is a real frame from the renderer, using the *Synthwave Neon* palette with `bottom` position.
+
+| Style | Example |
 |---|---|
-| `rounded_bars` | Smooth vertical bars with pill-shaped tops; gradients from base to peak |
-| `equalizer` | Classic stacked segment columns; blocky, retro equalizer aesthetic |
+| `rounded_mirror` — ✨ Capsule bars with water reflection | ![rounded_mirror](image/examples/rounded_mirror.jpg) |
+| `dot_matrix` — 🟣 Halftone LED dot matrix | ![dot_matrix](image/examples/dot_matrix.jpg) |
+| `neon_ladder` — 🎛️ Neon segmented ladder with floor reflection | ![neon_ladder](image/examples/neon_ladder.jpg) |
+| `center_symmetrical` — ⚡ Double-sided center soundwave | ![center_symmetrical](image/examples/center_symmetrical.jpg) |
+| `flowing_ribbons` — 〰️ Glowing sine wave ribbons | ![flowing_ribbons](image/examples/flowing_ribbons.jpg) |
+| `sharp_spikes` — 📐 Cyber polygon spikes | ![sharp_spikes](image/examples/sharp_spikes.jpg) |
+| `mirrored_bars` — 📊 Classic mirrored spectrum (bass in center) | ![mirrored_bars](image/examples/mirrored_bars.jpg) |
+| `frequency_bars` — 📈 Classic frequency bars (bass → treble) | ![frequency_bars](image/examples/frequency_bars.jpg) |
+| `none` — 🚫 Clean (shake & pulse only) | ![none](image/examples/none.jpg) |
+
+Regenerate the examples after changing the renderer:
+
+```powershell
+# Synthetic background & spectrum (no project needed)
+python scripts/generate_style_examples.py
+
+# Real background art + most dynamic frame of a project's song
+python scripts/generate_style_examples.py --project projects/<your_project>
+
+# Custom colours, or sample them from the project background
+python scripts/generate_style_examples.py --project projects/<your_project> --palette auto
+```
 
 ## Position Reference
 

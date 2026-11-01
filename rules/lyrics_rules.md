@@ -25,6 +25,7 @@ La letra DEBE seguir obligatoriamente esta estructura y nombres de sección:
 ### Fonética para la IA (Términos en Inglés)
 - Escribe los términos técnicos en inglés **exactamente como se deben pronunciar en español** para que el modelo de voz los cante con perfecta dicción:
   - Ejemplos: `bac-end` (backend), `fron-end` (frontend), `ese-cu-ele` (SQL), `pi-pi-ay` o `a-pi` (API), `deplóy` (deploy), `git-job` (GitHub), `yábascript` (JavaScript), `paiton` (Python), `dóquer` (Docker), `bóg` (bug), `claúd` (cloud), `cúbernetes` (Kubernetes), `servér` (server).
+- Solo escribe los términos técnicos en inglés de la canci÷on, si el contexto de la petición del usuario lo requiere
 
 ### Menciones Obligatorias
 En el `[Intro]`, DEBES incluir obligatoriamente las siguientes dos frases escritas exactamente así:
@@ -37,7 +38,6 @@ Ejemplo de [Intro] válido (máximo 4 líneas):
 Compa, súbale al requinto y prenda la consola,
 Música de la cuatro cero tres,
 Corridos en ache-te-eme-ele pa' que suene recio,
-¡Puro código bélico, viejo!
 ```
 
 ## 3. HASHTAGS
