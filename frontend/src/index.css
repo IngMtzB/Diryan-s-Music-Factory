@@ -1,0 +1,473 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..900&family=Rajdhani:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Share+Tech+Mono&display=swap');
+
+/* 
+ * Apple-inspired Calm Light Mode with Representative #00e0ff Accent
+ * Deep dark shadows, zero milky white fogs, crisp contrast.
+ */
+:root {
+  /* Canvas & Surfaces: Apple macOS warm neutral system grey */
+  --token-surface: #f5f5f7;
+  --token-background: #f5f5f7;
+  --token-surface-dim: #e5e5ea;
+  --token-surface-bright: #ffffff;
+
+  /* Surface Elevation Hierarchy */
+  --token-surface-container-lowest: #ffffff;   /* Pure white elevated cards & dialogs */
+  --token-surface-container-low: #f0f0f3;      /* Sidebars & header bars */
+  --token-surface-container: #ebebf0;          /* Inset wells & grouped cards */
+  --token-surface-container-high: #e3e3e8;     /* Button hover & active chip backgrounds */
+  --token-surface-container-highest: #d8d8de;  /* Subtle pill borders & badge wells */
+  --token-surface-variant: #e5e5ea;
+
+  /* Typography: Apple Soft Charcoal */
+  --token-on-surface: #12181a;                 /* Primary text */
+  --token-on-surface-variant: #4a5559;         /* Secondary text */
+  --token-on-background: #12181a;
+
+  /* Borders & Dividers */
+  --token-outline: #728085;                    /* Muted metadata & placeholders */
+  --token-outline-variant: #d4dadf;            /* 1px subtle divider lines */
+
+  /* Representative #00e0ff Brand Cyan in White Mode */
+  --token-primary: #008fa3;                    /* Deep readable cyan for body text / icons */
+  --token-on-primary: #ffffff;
+  --token-primary-container: #00e0ff;          /* Signature #00e0ff Brand Cyan */
+  --token-on-primary-container: #00232b;       /* Deep dark cyan for 100% contrast & legibility on #00e0ff */
+  --token-primary-fixed: #00778a;              /* Text accent */
+  --token-primary-fixed-dim: #00daf8;
+  --token-on-primary-fixed: #001f25;           /* Deep dark text on #00e0ff */
+  --token-on-primary-fixed-variant: #004e5a;
+  --token-surface-tint: #00e0ff;
+
+  /* Secondary: Soft slate-teal */
+  --token-secondary: #2e6671;
+  --token-on-secondary: #ffffff;
+  --token-secondary-container: #d9edf2;
+  --token-on-secondary-container: #10323a;
+  --token-secondary-fixed: #d9edf2;
+  --token-secondary-fixed-dim: #2e6671;
+  --token-on-secondary-fixed: #001f25;
+  --token-on-secondary-fixed-variant: #10323a;
+
+  /* Tertiary: Soft amber */
+  --token-tertiary: #b25e00;
+  --token-on-tertiary: #ffffff;
+  --token-tertiary-container: #fff1dc;
+  --token-on-tertiary-container: #5c2d00;
+  --token-tertiary-fixed: #b25e00;
+  --token-tertiary-fixed-dim: #8a4800;
+  --token-on-tertiary-fixed: #ffffff;
+  --token-on-tertiary-fixed-variant: #421e00;
+
+  /* Errors / Alerts: Apple System Red */
+  --token-error: #d70015;
+  --token-on-error: #ffffff;
+  --token-error-container: #ffeaec;
+  --token-on-error-container: #7f000c;
+
+  /* Inverses */
+  --token-inverse-surface: #1d1d1f;
+  --token-inverse-on-surface: #f5f5f7;
+  --token-inverse-primary: #00daf8;
+
+  --theme-x: 50vw;
+  --theme-y: 50vh;
+  --theme-r: 150vmax;
+}
+
+/* Dark Mode tokens from "example.html" */
+html.dark {
+  --token-surface-dim: #0e1416;
+  --token-surface-bright: #333a3c;
+  --token-primary: #baf2ff;
+  --token-on-tertiary-fixed: #251a00;
+  --token-primary-container: #00e0ff;
+  --token-inverse-surface: #dde4e6;
+  --token-inverse-on-surface: #2b3233;
+  --token-on-error-container: #ffdad6;
+  --token-background: #0e1416;
+  --token-on-primary: #00363f;
+  --token-on-background: #dde4e6;
+  --token-primary-fixed: #a5eeff;
+  --token-surface-variant: #2f3638;
+  --token-tertiary-container: #fec42e;
+  --token-on-surface: #dde4e6;
+  --token-tertiary-fixed: #ffdf9d;
+  --token-secondary-fixed-dim: #99cfdc;
+  --token-on-secondary: #00363f;
+  --token-surface: #0e1416;
+  --token-surface-container-highest: #2f3638;
+  --token-on-secondary-container: #88becb;
+  --token-on-primary-fixed: #001f25;
+  --token-secondary: #99cfdc;
+  --token-outline-variant: #3b494c;
+  --token-on-primary-fixed-variant: #004e5a;
+  --token-secondary-container: #0f4e59;
+  --token-primary-fixed-dim: #00daf8;
+  --token-on-error: #690005;
+  --token-tertiary: #ffe6b6;
+  --token-surface-container-lowest: #090f11;
+  --token-on-primary-container: #001f25;
+  --token-secondary-fixed: #b4ecf9;
+  --token-surface-container-high: #242b2d;
+  --token-on-tertiary-container: #6f5200;
+  --token-tertiary-fixed-dim: #f7be27;
+  --token-error: #ffb4ab;
+  --token-surface-tint: #00daf8;
+  --token-on-tertiary-fixed-variant: #5b4300;
+  --token-inverse-primary: #006877;
+  --token-on-secondary-fixed-variant: #0f4e59;
+  --token-on-tertiary: #3f2e00;
+  --token-surface-container-low: #161d1e;
+  --token-on-secondary-fixed: #001f25;
+  --token-error-container: #93000a;
+  --token-outline: #859397;
+  --token-surface-container: #1a2122;
+  --token-on-surface-variant: #bac9cd;
+}
+
+@theme inline {
+  --color-surface-dim: var(--token-surface-dim);
+  --color-surface-bright: var(--token-surface-bright);
+  --color-primary: var(--token-primary);
+  --color-on-tertiary-fixed: var(--token-on-tertiary-fixed);
+  --color-primary-container: var(--token-primary-container);
+  --color-inverse-surface: var(--token-inverse-surface);
+  --color-inverse-on-surface: var(--token-inverse-on-surface);
+  --color-on-error-container: var(--token-on-error-container);
+  --color-background: var(--token-background);
+  --color-on-primary: var(--token-on-primary);
+  --color-on-background: var(--token-on-background);
+  --color-primary-fixed: var(--token-primary-fixed);
+  --color-surface-variant: var(--token-surface-variant);
+  --color-tertiary-container: var(--token-tertiary-container);
+  --color-on-surface: var(--token-on-surface);
+  --color-tertiary-fixed: var(--token-tertiary-fixed);
+  --color-secondary-fixed-dim: var(--token-secondary-fixed-dim);
+  --color-on-secondary: var(--token-on-secondary);
+  --color-surface: var(--token-surface);
+  --color-surface-container-highest: var(--token-surface-container-highest);
+  --color-on-secondary-container: var(--token-on-secondary-container);
+  --color-on-primary-fixed: var(--token-on-primary-fixed);
+  --color-secondary: var(--token-secondary);
+  --color-outline-variant: var(--token-outline-variant);
+  --color-on-primary-fixed-variant: var(--token-on-primary-fixed-variant);
+  --color-secondary-container: var(--token-secondary-container);
+  --color-primary-fixed-dim: var(--token-primary-fixed-dim);
+  --color-on-error: var(--token-on-error);
+  --color-tertiary: var(--token-tertiary);
+  --color-surface-container-lowest: var(--token-surface-container-lowest);
+  --color-on-primary-container: var(--token-on-primary-container);
+  --color-secondary-fixed: var(--token-secondary-fixed);
+  --color-surface-container-high: var(--token-surface-container-high);
+  --color-on-tertiary-container: var(--token-on-tertiary-container);
+  --color-tertiary-fixed-dim: var(--token-tertiary-fixed-dim);
+  --color-error: var(--token-error);
+  --color-surface-tint: var(--token-surface-tint);
+  --color-on-tertiary-fixed-variant: var(--token-on-tertiary-fixed-variant);
+  --color-inverse-primary: var(--token-inverse-primary);
+  --color-on-secondary-fixed-variant: var(--token-on-secondary-fixed-variant);
+  --color-on-tertiary: var(--token-on-tertiary);
+  --color-surface-container-low: var(--token-surface-container-low);
+  --color-on-secondary-fixed: var(--token-on-secondary-fixed);
+  --color-error-container: var(--token-error-container);
+  --color-outline: var(--token-outline);
+  --color-surface-container: var(--token-surface-container);
+  --color-on-surface-variant: var(--token-on-surface-variant);
+
+  /* Spacing tokens */
+  --spacing-space-xs: 0.25rem;
+  --spacing-space-sm: 0.5rem;
+  --spacing-space-md: 0.75rem;
+  --spacing-space-lg: 1rem;
+  --spacing-space-xl: 1.5rem;
+  --spacing-gutter-dense: 0.5rem;
+  --spacing-gutter: 1rem;
+  --spacing-margin-compact: 1rem;
+  --spacing-margin: 1.5rem;
+
+  /* Legacy compatibility tokens */
+  --color-studio-950: var(--token-surface-container-lowest);
+  --color-studio-900: var(--token-surface);
+  --color-studio-850: var(--token-surface-container-low);
+  --color-studio-800: var(--token-surface-container);
+  --color-studio-700: var(--token-surface-container-high);
+  --color-studio-600: var(--token-surface-container-highest);
+  --color-studio-500: var(--token-outline-variant);
+
+  --color-brand-cyan: #0071e3;
+  --color-brand-pink: #FF2A55;
+  --color-brand-purple: #3a6073;
+  --color-brand-gold: #b25e00;
+
+  /* Fonts */
+  --font-headline: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-headline-xl: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-headline-lg: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-headline-md: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-headline-sm: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'JetBrains Mono', monospace;
+  --font-body-lg: 'JetBrains Mono', monospace;
+  --font-body-md: 'JetBrains Mono', monospace;
+  --font-body-sm: 'JetBrains Mono', monospace;
+  --font-label: 'JetBrains Mono', monospace;
+  --font-label-lg: 'JetBrains Mono', monospace;
+  --font-label-md: 'JetBrains Mono', monospace;
+  --font-label-sm: 'JetBrains Mono', monospace;
+  --font-tech: 'JetBrains Mono', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Typography size utilities */
+.text-headline-xl { font-size: 32px; line-height: 40px; font-weight: 700; letter-spacing: -0.02em; }
+.text-headline-lg { font-size: 24px; line-height: 32px; font-weight: 700; letter-spacing: -0.015em; }
+.text-headline-md { font-size: 18px; line-height: 24px; font-weight: 600; letter-spacing: -0.01em; }
+.text-headline-sm { font-size: 15px; line-height: 20px; font-weight: 600; }
+.text-body-lg { font-size: 14px; line-height: 22px; font-weight: 400; }
+.text-body-md { font-size: 13px; line-height: 18px; font-weight: 400; }
+.text-body-sm { font-size: 11px; line-height: 16px; font-weight: 400; }
+.text-label-lg { font-size: 12px; line-height: 16px; letter-spacing: 0.04em; font-weight: 600; }
+.text-label-md { font-size: 10px; line-height: 14px; letter-spacing: 0.08em; font-weight: 600; }
+.text-label-sm { font-size: 9px; line-height: 12px; letter-spacing: 0.08em; font-weight: 700; }
+
+body {
+  background-color: var(--token-surface);
+  color: var(--token-on-surface);
+  min-height: 100vh;
+  font-family: 'JetBrains Mono', monospace;
+  overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.35s ease, color 0.35s ease;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  user-select: none;
+}
+
+.material-symbols-filled {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Epic View Transitions API for Dark <-> Light Mode */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 9999;
+  animation: epicThemePortalReveal 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes epicThemePortalReveal {
+  0% {
+    clip-path: circle(0px at var(--theme-x, 50vw) var(--theme-y, 50vh));
+    filter: brightness(1.25) saturate(1.2);
+  }
+  65% {
+    filter: brightness(1.05) saturate(1.05);
+  }
+  100% {
+    clip-path: circle(var(--theme-r, 150vmax) at var(--theme-x, 50vw) var(--theme-y, 50vh));
+    filter: brightness(1) saturate(1);
+  }
+}
+
+@keyframes sonicShockwaveRing {
+  0% {
+    width: 0px;
+    height: 0px;
+    opacity: 1;
+    border-width: 14px;
+  }
+  70% {
+    opacity: 0.65;
+    border-width: 4px;
+  }
+  100% {
+    width: 260vmax;
+    height: 260vmax;
+    opacity: 0;
+    border-width: 1px;
+  }
+}
+
+.animate-sonic-shockwave {
+  animation: sonicShockwaveRing 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Epic Loader Animations */
+@keyframes epicOrbitCw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes epicOrbitCcw {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes epicEqualizerBar {
+  0%, 100% { transform: scaleY(0.18); opacity: 0.5; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
+@keyframes epicScanSweep {
+  0% { transform: translateY(-100%); opacity: 0; }
+  50% { opacity: 0.6; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+
+.animate-orbit-cw {
+  animation: epicOrbitCw 8s linear infinite;
+}
+
+.animate-orbit-ccw {
+  animation: epicOrbitCcw 6s linear infinite;
+}
+
+.animate-eq-bar {
+  transform-origin: bottom;
+  animation: epicEqualizerBar 0.9s ease-in-out infinite;
+}
+
+.animate-scan-sweep {
+  animation: epicScanSweep 2.4s ease-in-out infinite;
+}
+
+/* Apple-style Soft Subtle Tech Grid */
+.bg-tech-grid {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(0, 0, 0, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
+}
+
+html.dark .bg-tech-grid {
+  background-image: 
+    linear-gradient(to right, rgba(0, 224, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 224, 255, 0.04) 1px, transparent 1px);
+}
+
+/* Futuristic Button */
+.btn-futuristic {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background: var(--token-surface-container);
+  border: 1px solid var(--token-outline-variant);
+  color: var(--token-on-surface);
+  font-family: 'Rajdhani', 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+html.dark .btn-futuristic {
+  background: rgba(0, 224, 255, 0.08);
+  border-color: rgba(0, 224, 255, 0.35);
+  box-shadow: 0 0 15px rgba(0, 224, 255, 0.08);
+}
+
+.btn-futuristic:hover {
+  background: var(--token-surface-container-high);
+  border-color: var(--token-primary);
+  transform: translateY(-1px);
+}
+
+html.dark .btn-futuristic:hover {
+  background: rgba(0, 224, 255, 0.16);
+  border-color: rgba(0, 224, 255, 0.85);
+  box-shadow: 0 0 25px rgba(0, 224, 255, 0.25);
+}
+
+.btn-futuristic:active {
+  transform: translateY(0);
+}
+
+/* Animations */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.99) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-fade-scale {
+  animation: fadeInScale 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Clipboard Copy Splash Animations */
+@keyframes splashRing {
+  0% {
+    transform: scale(0.4);
+    opacity: 0.9;
+  }
+  60% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes splashPop {
+  0% {
+    transform: scale(0.7) rotate(-10deg);
+  }
+  50% {
+    transform: scale(1.2) rotate(3deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+.animate-splash-ring {
+  animation: splashRing 0.75s ease-out forwards;
+}
+
+.animate-splash-pop {
+  animation: splashPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* Apple-style Gentle Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.32);
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32);
+}
