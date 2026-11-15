@@ -45,6 +45,27 @@ class ProviderClient(abc.ABC):
         """Generate a 16:9 background image and return raw PNG bytes."""
 
 
+def ensure_image_prompt_framing(prompt: str) -> str:
+    """
+    Ensure the prompt explicitly demands 16:9 composition centered and safe
+    for 9:16 vertical crop (TikTok/Reels/Shorts) with a clean lower third.
+    """
+    prompt = (prompt or "").strip()
+    if not prompt:
+        return prompt
+    lower = prompt.lower()
+    additions = []
+    if "9:16" not in lower and "9x16" not in lower and "vertical" not in lower:
+        additions.append(
+            "Wide 16:9 composition with all main subjects centered and framed so it looks complete both in 16:9 and when center-cropped to 9:16 vertical format (safe zone centered)"
+        )
+    if "lower" not in lower and "waveform" not in lower and "bottom" not in lower:
+        additions.append("keep lower 25% darker and clean for audio waveform overlay")
+    if additions:
+        return f"{prompt}. {'. '.join(additions)}."
+    return prompt
+
+
 # ── Gemini provider ───────────────────────────────────────────────────────────
 
 class GeminiProvider(ProviderClient):
@@ -71,6 +92,7 @@ class GeminiProvider(ProviderClient):
                 system_instruction=system_prompt,
                 temperature=0.8,
                 response_mime_type="application/json",
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             ),
         )
         return _parse_json(response.text)
@@ -84,14 +106,16 @@ class GeminiProvider(ProviderClient):
         """
         from google.genai import types
 
+        framed_prompt = ensure_image_prompt_framing(prompt)
         response = self._client.models.generate_content(
             model=self._image_model,
-            contents=prompt,
+            contents=framed_prompt,
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE"],
                 image_config=types.ImageConfig(
                     aspect_ratio="16:9",
                 ),
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             ),
         )
 
@@ -132,9 +156,10 @@ class AnthropicProvider(ProviderClient):
 
     # ── Image ──────────────────────────────────────────────────────────────
     def generate_image(self, prompt: str) -> bytes:
+        framed_prompt = ensure_image_prompt_framing(prompt)
         response = self._openai.images.generate(
             model=DALLE_MODEL,
-            prompt=prompt,
+            prompt=framed_prompt,
             size="1792x1024",  # closest 16:9 DALL-E 3 supports
             quality="hd",
             response_format="b64_json",

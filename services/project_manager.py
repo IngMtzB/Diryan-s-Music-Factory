@@ -16,6 +16,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from config import PROJECTS_DIR
+from services.social import build_data_text
 
 console = Console()
 
@@ -33,13 +34,51 @@ def _slugify(text: str, max_len: int = 48) -> str:
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
-def create_project(concept: str) -> Path:
+def is_draft(project_dir: Path) -> bool:
+    """Check if project directory is a draft."""
+    return project_dir.name.startswith("_draft_")
+
+
+def rename_project_to_title(project_dir: Path, title: str) -> Path:
+    """Rename project folder to the slugified song title."""
+    import shutil
+    slug = _slugify(title)
+    dest = project_dir.parent / slug
+    counter = 1
+    base = dest
+    while dest.exists() and dest != project_dir:
+        dest = base.parent / f"{base.name}_{counter}"
+        counter += 1
+    if dest != project_dir:
+        shutil.move(str(project_dir), str(dest))
+    return dest
+
+
+def write_data_file(project_dir: Path, content_or_spec: str | dict[str, Any]) -> Path:
+    """Write Data.txt from text or spec dictionary."""
+    if isinstance(content_or_spec, dict):
+        spec = dict(content_or_spec)
+        if not spec.get("lyrics"):
+            lyrics_file = project_dir / "02_lyrics.txt"
+            if lyrics_file.exists():
+                spec["lyrics"] = lyrics_file.read_text(encoding="utf-8").strip()
+        text = build_data_text(spec)
+    else:
+        text = str(content_or_spec)
+    data_file = project_dir / "Data.txt"
+    data_file.write_text(text, encoding="utf-8")
+    return data_file
+
+
+def create_project(concept: str, draft: bool = False) -> Path:
     """
     Create and return a new project directory under ``projects/<slug>/``.
 
     The directory is created immediately so subsequent steps can write into it.
     """
     slug = _slugify(concept)
+    if draft:
+        slug = f"_draft_{slug}"
     project_dir = PROJECTS_DIR / slug
 
     # Avoid collisions by appending a counter
@@ -63,12 +102,33 @@ def save_spec(project_dir: Path, spec: dict[str, Any]) -> None:
     - Data.txt:       YouTube/Social metadata (Title, Description with lyrics, Hashtags)
     """
     styles_path = project_dir / "01_styles.json"
-    styles_payload = {
-        "title": spec.get("title", ""),
-        "suno_styles": spec.get("suno_styles", ""),
-        "image_prompt": spec.get("image_prompt", ""),
-        "render_spec": spec.get("render_spec", {}),
+    existing_styles: dict[str, Any] = {}
+    if styles_path.exists():
+        try:
+            existing_styles = json.loads(styles_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    styles_payload: dict[str, Any] = {
+        "title": spec.get("title") or existing_styles.get("title", ""),
+        "suno_styles": spec.get("suno_styles") or existing_styles.get("suno_styles", ""),
+        "image_prompt": spec.get("image_prompt") or existing_styles.get("image_prompt", ""),
+        "render_spec": spec.get("render_spec") or existing_styles.get("render_spec", {}),
     }
+    if spec.get("style") or existing_styles.get("style"):
+        styles_payload["style"] = spec.get("style") or existing_styles.get("style", "")
+    if spec.get("concept") or existing_styles.get("concept"):
+        styles_payload["concept"] = spec.get("concept") or existing_styles.get("concept", "")
+    raw_gtags = spec.get("genre_tags") if "genre_tags" in spec else existing_styles.get("genre_tags")
+    if isinstance(raw_gtags, list):
+        styles_payload["genre_tags"] = [str(t).strip() for t in raw_gtags if str(t).strip()]
+    elif isinstance(raw_gtags, str) and raw_gtags.strip():
+        try:
+            parsed_gt = json.loads(raw_gtags)
+            if isinstance(parsed_gt, list):
+                styles_payload["genre_tags"] = [str(t).strip() for t in parsed_gt if str(t).strip()]
+        except Exception:
+            pass
     styles_path.write_text(
         json.dumps(styles_payload, indent=2, ensure_ascii=False),
         encoding="utf-8",
@@ -76,28 +136,30 @@ def save_spec(project_dir: Path, spec: dict[str, Any]) -> None:
     console.print(f"[green]✔[/green]  Saved [bold]{styles_path.name}[/bold]")
 
     lyrics_path = project_dir / "02_lyrics.txt"
-    lyrics_path.write_text(spec.get("lyrics", ""), encoding="utf-8")
-    console.print(f"[green]✔[/green]  Saved [bold]{lyrics_path.name}[/bold]")
+    lyrics = spec.get("lyrics")
+    if lyrics and isinstance(lyrics, str):
+        lyrics_path.write_text(lyrics, encoding="utf-8")
+        console.print(f"[green]✔[/green]  Saved [bold]{lyrics_path.name}[/bold]")
+    elif not lyrics_path.exists():
+        lyrics_path.write_text("", encoding="utf-8")
+    else:
+        # Preserve existing lyrics on disk and load into spec
+        existing_lyrics = lyrics_path.read_text(encoding="utf-8")
+        if existing_lyrics:
+            spec["lyrics"] = existing_lyrics
 
     # 3 ── styles.txt (Suno AI prompt) ─────────────────────────────────────
-    suno_styles = spec.get("suno_styles", "").strip()
+    suno_styles = str(spec.get("suno_styles") or "").strip()
     if suno_styles:
         suno_file = project_dir / "styles.txt"
         suno_file.write_text(suno_styles, encoding="utf-8")
         console.print(f"[green]✔[/green]  Saved [bold]{suno_file.name}[/bold] (Suno style prompt)")
+    elif (project_dir / "styles.txt").exists():
+        spec["suno_styles"] = (project_dir / "styles.txt").read_text(encoding="utf-8").strip()
 
-    # 4 ── Data.txt (Title, Description with lyrics, Hashtags) ─────────────
-    title = spec.get("title", "").strip()
-    desc = spec.get("description", "").strip()
-    hashtags = spec.get("hashtags", "").strip()
-    data_content = (
-        f"TITLE:\n{title}\n\n"
-        f"DESCRIPTION:\n{desc}\n\n"
-        f"HASHTAGS:\n{hashtags}\n"
-    )
-    data_file = project_dir / "Data.txt"
-    data_file.write_text(data_content, encoding="utf-8")
-    console.print(f"[green]✔[/green]  Saved [bold]{data_file.name}[/bold] (Title, Description & Hashtags)")
+    # 4 ── Data.txt (YouTube & TikTok metadata) ───────────────────────────
+    write_data_file(project_dir, spec)
+    console.print(f"[green]✔[/green]  Saved [bold]Data.txt[/bold] (YouTube & TikTok metadata)")
 
 
 def save_background(project_dir: Path, background_bytes: bytes) -> Path:

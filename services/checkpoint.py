@@ -56,9 +56,17 @@ class CheckpointManager:
 
     # ── Session metadata ───────────────────────────────────────────────────
 
-    def save_meta(self, **kwargs: str | None) -> None:
+    def save_meta(self, **kwargs: Any) -> None:
         """Persist key=value session metadata (provider, concept, style, etc.)."""
-        items = [(k, str(v) if v is not None else "") for k, v in kwargs.items()]
+        items: list[tuple[str, str]] = []
+        for k, v in kwargs.items():
+            if v is None:
+                val_str = ""
+            elif isinstance(v, (list, dict)):
+                val_str = json.dumps(v, ensure_ascii=False)
+            else:
+                val_str = str(v)
+            items.append((k, val_str))
         self._conn.executemany(
             "INSERT OR REPLACE INTO session(key, value) VALUES (?, ?)",
             items,
@@ -164,9 +172,11 @@ def find_resumable_sessions() -> list[dict[str, Any]]:
             first = cp.first_incomplete()
             is_complete = cp.is_done("VIDEO_RENDERED")
             meta = cp.load_meta()
+            title = meta.get("title") or meta.get("concept", project_dir.name)
             sessions.append({
                 "project_dir": project_dir,
                 "name": project_dir.name,
+                "title": title,
                 "next_step": "COMPLETE" if is_complete else first,
                 "concept": meta.get("concept", project_dir.name),
                 "provider": meta.get("provider", "unknown"),
@@ -177,4 +187,55 @@ def find_resumable_sessions() -> list[dict[str, Any]]:
             continue
 
     return sessions
+
+
+def find_uninitialized_song_projects() -> list[dict[str, Any]]:
+    """
+    Search PROJECTS_DIR for existing project directories that contain an audio file
+    ('03_song.mp3') or (lyrics + styles), but do NOT have a valid, initialized session.db.
+    These are song projects that need their missing assets generated (01_styles.json,
+    03_background.png, Data.txt, session.db).
+    """
+    if not PROJECTS_DIR.exists():
+        return []
+
+    candidates: list[dict[str, Any]] = []
+    for candidate_dir in sorted(PROJECTS_DIR.iterdir()):
+        if not candidate_dir.is_dir():
+            continue
+
+        db_path = candidate_dir / "session.db"
+        if db_path.exists() and db_path.stat().st_size > 0:
+            try:
+                cp = CheckpointManager(candidate_dir)
+                is_init = cp.is_done("SESSION_INIT")
+                cp.close()
+                if is_init:
+                    continue
+            except Exception:
+                pass
+
+        audio_path = candidate_dir / "03_song.mp3"
+        lyrics_path = candidate_dir / "02_lyrics.txt"
+        styles_path = candidate_dir / "styles.txt"
+
+        if audio_path.exists() or (lyrics_path.exists() and styles_path.exists()):
+            has_lyrics = lyrics_path.exists() and lyrics_path.stat().st_size > 0
+            has_styles = styles_path.exists() and styles_path.stat().st_size > 0
+            has_audio = audio_path.exists() and audio_path.stat().st_size > 0
+            has_bg = (candidate_dir / "03_background.png").exists()
+
+            candidates.append({
+                "project_dir": candidate_dir,
+                "name": candidate_dir.name,
+                "has_audio": has_audio,
+                "has_lyrics": has_lyrics,
+                "has_styles": has_styles,
+                "has_bg": has_bg,
+                "lyrics_path": lyrics_path if has_lyrics else None,
+                "styles_path": styles_path if has_styles else None,
+                "audio_path": audio_path if has_audio else None,
+            })
+
+    return candidates
 
