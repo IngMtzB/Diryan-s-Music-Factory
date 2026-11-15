@@ -13,4 +13,7 @@ __pycache__
 projects/
 *.db
 
-*.db
+# Agents
+.agents/
+
+docs/image/
