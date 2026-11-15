@@ -39,7 +39,8 @@ image model to keep the **lower 25 %** of the frame as a darker, less detailed
 region (gradient fade, ground plane, mist, etc.) so the waveform overlay remains
 legible.
 
-## Aspect Ratios
+## Aspect Ratios & Vertical 9:16 Compatibility
 - Primary output: **16:9** (1920 × 1080)
 - Secondary output: **9:16** (1080 × 1920) — centre-cropped from the 16:9 master.
+- **Mandatory Framing Requirement**: The background image MUST look complete, balanced, and visually stunning in both 16:9 widescreen and 9:16 vertical format. When creating the `image_prompt`, explicitly demand that all primary characters, focal subjects, and essential narrative elements remain centered within the central vertical 9:16 safe zone, ensuring no crucial action or subject is cut off when cropped for TikTok, Instagram Reels, or YouTube Shorts. Keep the lower 25% darker and clean for waveform overlays.
 
