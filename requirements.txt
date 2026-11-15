@@ -20,3 +20,10 @@ opencv-python>=4.9
 numpy>=1.26
 Pillow>=10.2
 
+# ── Web Backend (FastAPI Studio) ───────────────────
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.12
+sse-starlette>=2.1
+
+

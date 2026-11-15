@@ -36,7 +36,7 @@ PROVIDER_KEYS: dict[str, list[str]] = {
 
 # Static fallback model identifiers (used when dynamic listing is skipped)
 GEMINI_TEXT_MODEL = "gemini-flash-latest"
-GEMINI_IMAGE_MODEL = "gemini-flash-image-generation"
+GEMINI_IMAGE_MODEL = "gemini-2.5-flash-image"
 ANTHROPIC_TEXT_MODEL = "claude-3-5-sonnet-20241022"
 DALLE_MODEL = "dall-e-3"
 
@@ -136,7 +136,7 @@ def pick_gemini_image_model(api_key: str, current_model: str | None = None) -> s
         return GEMINI_IMAGE_MODEL
 
     default_choice = current_model if (current_model and current_model in image_models) else next(
-        (m for m in image_models if "flash" in m),
+        (m for m in image_models if "flash-image" in m or "image" in m),
         image_models[0],
     )
     return inquirer.select(
